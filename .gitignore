@@ -1,0 +1,21 @@
+# Entorno virtual y temporales
+.venv/
+temp/
+*.log
+log.txt
+debug.txt
+api_response_debug.json
+
+# Archivos de configuración con credenciales / variables de entorno
+.env
+config_cursos.py
+
+# Archivos de distribución / descargas
+*.mp4
+*.pdf
+*.zip
+
+# PyCache
+__pycache__/
+*.pyc
+universo-hot-jamin/

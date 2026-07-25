@@ -11,6 +11,5 @@
 # então o subdomínio é: punchneedlelucrativo
 
 CURSOS_SUBDOMINIOS = [
-    "punchneedlelucrativo",
-    # Adicione o subdomínio do segundo curso (Plot) aqui quando descobrir
+    {"subdomain": "universo-hot-jamin", "productId": "1643794"},
 ]
