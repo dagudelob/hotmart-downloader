@@ -42,14 +42,35 @@ Ensure you have the following installed on your system:
    ```
 
 2. **Install dependencies**:
-   Using `uv` (recommended for fast execution) or `pip`:
+   You can set up the project environment using one of the following two options (using **`uv`** is highly recommended for speed and convenience):
+
+   ### Option A: Using `uv` (Recommended 🚀)
+   If you have [uv](https://github.com/astral-sh/uv) installed, it will automatically handle virtual environment creation and package installation instantly:
    ```bash
-   # Using uv:
+   # Run the script directly with uv (it will handle dependencies and virtualenv automatically)
+   uv run python hotmark.py
+   ```
+   *Alternatively, to sync dependencies inside uv manually:*
+   ```bash
    uv pip install -r requirements.txt
-   
-   # Or using standard pip:
+   ```
+
+   ### Option B: Using a Traditional Virtual Environment (`venv`)
+   If you prefer using standard Python built-in tools:
+   ```bash
+   # Create a virtual environment
+   python -m venv .venv
+
+   # Activate it (Windows PowerShell)
+   .venv\Scripts\Activate.ps1
+
+   # Activate it (macOS/Linux)
+   source .venv/bin/activate
+
+   # Install the requirements
    pip install -r requirements.txt
    ```
+
 
 3. **Configure your course subdomains**:
    Hotmart's API structure changed in 2026; the `check_token` endpoint often returns an empty `resources: []` list. To work around this, you must manually define the subdomain(s) of your course in `config_cursos.py`:
