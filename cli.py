@@ -13,117 +13,30 @@ def select_item_cli(options, title="Select an option:", show_exit=True):
         
     options_count = len(display_options)
     
-    # Ask the user if they want to digit index manually or scroll
-    os.system('cls' if os.name == 'nt' else 'clear')
-    print("=====================================================================")
-    print(" [ESC] Exit  |  [C] Display all content ")
-    print("=====================================================================")
-    print(f"\n=== {title} ===")
-    print("Choose selection method:")
-    print("1. Scroll/Navigate with keyboard arrows")
-    print("2. Type/Digit the index number directly")
-    choice = ""
-    while choice not in ["1", "2"]:
-        k = msvcrt.getch()
-        if k == b'1':
-            choice = "1"
-        elif k == b'2':
-            choice = "2"
-        elif k == b'\x1b': # ESC
-            print("\nExiting program...")
-            exit(0)
-        elif k == b'\xe0': # Special key
-            arrow = msvcrt.getch()
-            if arrow == b'K': # Left arrow
-                return -2
-        elif k == b'c' or k == b'C': # C shortcut
-            os.system('cls' if os.name == 'nt' else 'clear')
-            print(f"=== {title} (Full List) ===")
-            for idx, opt in enumerate(display_options, start=1):
-                print(f"{idx:3d}. {opt}")
-            print("\nPress any key to return...")
-            msvcrt.getch()
-            # Reprint choice menu
-            os.system('cls' if os.name == 'nt' else 'clear')
-            print("=====================================================================")
-            print(" [ESC] Exit  |  [C] Display all content ")
-            print("=====================================================================")
-            print(f"\n=== {title} ===")
-            print("Choose selection method:")
-            print("1. Scroll/Navigate with keyboard arrows")
-            print("2. Type/Digit the index number directly")
-            
-    if choice == "2":
-        # Digit mode with direct key capture for instant ESC/C support
-        typed = ""
-        while True:
-            os.system('cls' if os.name == 'nt' else 'clear')
-            print("=====================================================================")
-            print(" [ESC] Exit  |  [C] Display all content ")
-            print("=====================================================================")
-            print(f"\n=== {title} ===")
-            print(f"Type the number (1 to {options_count}) and press ENTER to select:")
-            print(f"> {typed}", end="", flush=True)
-            
-            key = msvcrt.getch()
-            if key == b'\x1b':  # ESC
-                print("\nExiting program...")
-                exit(0)
-            elif key == b'\x03':  # Ctrl+C
-                print("\nOperation cancelled.")
-                exit(0)
-            elif key == b'c' or key == b'C':  # C shortcut - display all content
-                os.system('cls' if os.name == 'nt' else 'clear')
-                print(f"=== {title} (Full List) ===")
-                for idx, opt in enumerate(display_options, start=1):
-                    print(f"{idx:3d}. {opt}")
-                print("\nPress any key to return...")
-                msvcrt.getch()
-            elif key == b'\r':  # ENTER
-                if typed:
-                    try:
-                        num = int(typed) - 1
-                        if 0 <= num < options_count:
-                            if show_exit and num == options_count - 1:
-                                print("\nExiting program...")
-                                exit(0)
-                            return num
-                    except ValueError:
-                        pass
-                typed = ""  # Reset on invalid input
-            elif key == b'\x08':  # Backspace
-                typed = typed[:-1]
-            elif key == b'\xe0':  # Special key
-                arrow = msvcrt.getch()
-                if arrow == b'K':  # LEFT arrow
-                    return -2
-            else:
-                try:
-                    char = key.decode('utf-8')
-                    if char.isdigit():
-                        typed += char
-                except UnicodeDecodeError:
-                    pass
-            
     # Scroll Mode
     selected = 0
+    display_all = False
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
         print("=====================================================================")
-        print(" [ESC] Exit  |  [F] Find/Type index directly  |  [C] Display all content ")
+        print(" [ESC] Exit  |  [F] Find/Type index directly  |  [C] " + ("Show paginated list" if display_all else "Show full list"))
         print("=====================================================================")
         print(f"\n=== {title} ===")
         print("(Use UP/DOWN arrows to navigate, SPACE or ENTER to select.)\n")
         
-        start_idx = max(0, selected - 5)
-        end_idx = min(options_count, selected + 6)
+        if display_all:
+            start_idx = 0
+            end_idx = options_count
+        else:
+            start_idx = max(0, selected - 5)
+            end_idx = min(options_count, selected + 6)
+            
+            if selected - 5 < 0:
+                end_idx = min(options_count, 11)
+            if selected + 6 > options_count:
+                start_idx = max(0, options_count - 11)
         
-        if selected - 5 < 0:
-            end_idx = min(options_count, 11)
-        if selected + 6 > options_count:
-            start_idx = max(0, options_count - 11)
-        
-        if start_idx > 0:
+        if not display_all and start_idx > 0:
             print("   ... (more options above) ...")
             
         for i in range(start_idx, end_idx):
@@ -133,7 +46,7 @@ def select_item_cli(options, title="Select an option:", show_exit=True):
             else:
                 print(f"   [ ] {i + 1:3d}. {opt}")
                 
-        if end_idx < options_count:
+        if not display_all and end_idx < options_count:
             print("   ... (more options below) ...")
         
         key = msvcrt.getch()
@@ -159,13 +72,8 @@ def select_item_cli(options, title="Select an option:", show_exit=True):
                 except ValueError:
                     pass
                 print("Invalid index. Try again.")
-        elif key == b'c' or key == b'C': # C shortcut - display all content
-            os.system('cls' if os.name == 'nt' else 'clear')
-            print(f"=== {title} (Full List) ===")
-            for idx, opt in enumerate(display_options, start=1):
-                print(f"{idx:3d}. {opt}")
-            print("\nPress any key to return to navigation...")
-            msvcrt.getch()
+        elif key == b'c' or key == b'C': # C shortcut - toggle full list / paginated list
+            display_all = not display_all
         elif key == b'\r' or key == b' ': # Enter or Space
             if show_exit and selected == options_count - 1:
                 print("\nExiting program...")
