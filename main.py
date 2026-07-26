@@ -147,85 +147,89 @@ async def get_subdomains():
     Returns a combined list of subdomains:
     1. Saved subdomains from config_cursos.py
     2. Auto-detected subdomains from Hotmart API using saved token
+    Always returns JSON — never raises a 500 HTML response.
     """
-    result = []
-    seen = set()
-
-    # 1. Load subdomains saved in config_cursos.py
     try:
-        from config_cursos import CURSOS_SUBDOMINIOS
-        for item in CURSOS_SUBDOMINIOS:
-            sd = item.get("subdomain", "").strip()
-            if sd and sd not in seen:
-                result.append({"subdomain": sd, "source": "config", "name": sd})
-                seen.add(sd)
-    except Exception:
-        pass
+        result = []
+        seen = set()
 
-    # 2. Auto-detect from Hotmart API using saved token
-    token = _read_env_token()
-    if token:
-        if token.startswith("Bearer "):
-            token = token.replace("Bearer ", "").strip()
+        # 1. Load subdomains saved in config_cursos.py
         try:
-            import re as _re
-            import base64 as _b64
-            import json as _json
-            # Try to unwrap JWT inner access_token
-            parts = token.split(".")
-            if len(parts) == 3:
-                padded = parts[1] + "=" * (-len(parts[1]) % 4)
-                payload = _json.loads(_b64.b64decode(padded).decode("utf-8"))
-                if "access_token" in payload:
-                    token = payload["access_token"]
+            from config_cursos import CURSOS_SUBDOMINIOS
+            for item in CURSOS_SUBDOMINIOS:
+                sd = item.get("subdomain", "").strip()
+                if sd and sd not in seen:
+                    result.append({"subdomain": sd, "source": "config", "name": sd})
+                    seen.add(sd)
         except Exception:
             pass
 
-        headers = {
-            "authorization": f"Bearer {token}",
-            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "accept": "application/json",
-        }
-        try:
-            resp = requests.get(
-                "https://api-club.hotmart.com/hot-club-api/rest/v3/membership",
-                headers=headers,
-                timeout=10
-            )
-            if resp.status_code == 200:
-                memberships = resp.json()
-                items = memberships if isinstance(memberships, list) else memberships.get("items", [])
-                for item in items:
-                    resource = item.get("resource", item)
-                    sd = resource.get("subdomain", "").strip()
-                    name = resource.get("name") or resource.get("productName") or sd
-                    if sd and sd not in seen:
-                        result.append({"subdomain": sd, "source": "api", "name": name})
-                        seen.add(sd)
-        except Exception:
-            pass
-
-        # Fallback: user/{subdomain}/status endpoint pattern
-        if not result:
+        # 2. Auto-detect from Hotmart API using saved token
+        token = _read_env_token()
+        token_present = bool(token)
+        if token:
+            if token.startswith("Bearer "):
+                token = token.replace("Bearer ", "").strip()
             try:
-                resp2 = requests.get(
-                    "https://api-club-course-consumption-gateway-ga.cb.hotmart.com/v1/memberships",
+                import base64 as _b64
+                import json as _json
+                parts = token.split(".")
+                if len(parts) == 3:
+                    padded = parts[1] + "=" * (-len(parts[1]) % 4)
+                    payload = _json.loads(_b64.b64decode(padded).decode("utf-8"))
+                    if "access_token" in payload:
+                        token = payload["access_token"]
+            except Exception:
+                pass
+
+            headers = {
+                "authorization": f"Bearer {token}",
+                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "accept": "application/json",
+            }
+            try:
+                resp = requests.get(
+                    "https://api-club.hotmart.com/hot-club-api/rest/v3/membership",
                     headers=headers,
                     timeout=10
                 )
-                if resp2.status_code == 200:
-                    data2 = resp2.json()
-                    items2 = data2 if isinstance(data2, list) else data2.get("items", [])
-                    for item in items2:
-                        sd = item.get("subdomain", "").strip()
-                        name = item.get("name") or sd
+                if resp.status_code == 200:
+                    memberships = resp.json()
+                    items = memberships if isinstance(memberships, list) else memberships.get("items", [])
+                    for item in items:
+                        resource = item.get("resource", item)
+                        sd = resource.get("subdomain", "").strip()
+                        name = resource.get("name") or resource.get("productName") or sd
                         if sd and sd not in seen:
                             result.append({"subdomain": sd, "source": "api", "name": name})
                             seen.add(sd)
             except Exception:
                 pass
 
-    return {"subdomains": result, "token_present": bool(token)}
+            # Fallback endpoint
+            if not [r for r in result if r["source"] == "api"]:
+                try:
+                    resp2 = requests.get(
+                        "https://api-club-course-consumption-gateway-ga.cb.hotmart.com/v1/memberships",
+                        headers=headers,
+                        timeout=10
+                    )
+                    if resp2.status_code == 200:
+                        data2 = resp2.json()
+                        items2 = data2 if isinstance(data2, list) else data2.get("items", [])
+                        for item in items2:
+                            sd = item.get("subdomain", "").strip()
+                            name = item.get("name") or sd
+                            if sd and sd not in seen:
+                                result.append({"subdomain": sd, "source": "api", "name": name})
+                                seen.add(sd)
+                except Exception:
+                    pass
+
+        return {"subdomains": result, "token_present": token_present}
+
+    except Exception as e:
+        return JSONResponse(status_code=200, content={"subdomains": [], "token_present": False, "error": str(e)})
 
 
 @app.get("/", response_class=HTMLResponse)

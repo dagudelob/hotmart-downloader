@@ -207,9 +207,13 @@
         // ─── Subdomain chip loader ─────────────────────────────────────
         async function loadSubdomains() {
             const chipsEl = document.getElementById('subdomain-chips');
-            const placeholder = document.getElementById('chips-placeholder');
             try {
                 const res = await fetch('/api/subdomains');
+                // Always check HTTP status before trying to parse JSON
+                if (!res.ok) {
+                    const text = await res.text();
+                    throw new Error(`Server error ${res.status}: ${text.slice(0, 120)}`);
+                }
                 const data = await res.json();
                 chipsEl.innerHTML = '';
 
@@ -246,7 +250,7 @@
 
                 lucide.createIcons();
             } catch (e) {
-                chipsEl.innerHTML = '<span class="text-xs text-red-400">Error cargando subdominios.</span>';
+                chipsEl.innerHTML = `<span class="text-xs text-red-400">Error cargando subdominios: ${e.message}. Usa el campo manual.</span>`;
             }
         }
         loadSubdomains();
