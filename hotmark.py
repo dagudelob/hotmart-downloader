@@ -32,20 +32,28 @@ def fetch_course_navigation(authMart, dominio, nav_headers):
     """
     Retrieve modules and pages of the course from Hotmart API.
     Supports gateway fallback routing.
+    Raises RuntimeError on failure instead of calling exit() so web server stays alive.
     """
-    resp_nav = authMart.get('https://api-club.hotmart.com/hot-club-api/rest/v3/navigation')
+    # First attempt: legacy API (no subdomain needed)
+    resp_nav = authMart.get(
+        'https://api-club.hotmart.com/hot-club-api/rest/v3/navigation',
+        headers=nav_headers
+    )
     if resp_nav.status_code == 200 and 'modules' in resp_nav.json():
         return resp_nav.json()
-    
-    # Request to the new gateway with consumer token and headers
+
+    # Second attempt: new gateway with subdomain
     resp_nav = authMart.get(
         f'https://api-club-course-consumption-gateway-ga.cb.hotmart.com/v1/navigation?subdomain={dominio}',
         headers=nav_headers
     )
-    
+
     # Fallback to fetch productId if x-product-id header is required
     if resp_nav.status_code == 400 and 'x-product-id' in resp_nav.text:
-        resp_mem = authMart.get(f'https://api-club-course-consumption-gateway-ga.cb.hotmart.com/v1/user/{dominio}/status', headers=nav_headers)
+        resp_mem = authMart.get(
+            f'https://api-club-course-consumption-gateway-ga.cb.hotmart.com/v1/user/{dominio}/status',
+            headers=nav_headers
+        )
         if resp_mem.status_code == 200:
             p_id = resp_mem.json().get('productId') or resp_mem.json().get('id')
             if p_id:
@@ -63,7 +71,7 @@ def fetch_course_navigation(authMart, dominio, nav_headers):
     else:
         print_color(f"[ERROR] Could not retrieve modules list (HTTP {resp_nav.status_code}):")
         print_color(f"[ERROR] API Response: {resp_nav.text[:300]}")
-        exit(1)
+        raise RuntimeError(f"Hotmart API returned {resp_nav.status_code}: {resp_nav.text[:200]}")
 
 
 def download_class_video(aula, modulo, folder_path_class, first_folder, authMart, nav_headers, dominio, progress_callback=None):
