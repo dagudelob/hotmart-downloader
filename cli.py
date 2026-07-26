@@ -103,12 +103,11 @@ def input_number_cli(prompt, min_val, max_val, title="Enter Range", options=None
             exit(0)
         elif key == b'c' or key == b'C':  # C shortcut
             if options:
-                os.system('cls' if os.name == 'nt' else 'clear')
-                print(f"=== {title} (Full List) ===")
-                for idx, opt in enumerate(options, start=1):
-                    print(f"{idx:3d}. {opt}")
-                print("\nPress any key to return...")
-                msvcrt.getch()
+                sel_idx = select_item_cli(options, title=title, show_exit=False)
+                if sel_idx >= 0:
+                    return sel_idx + 1  # Return 1-based index
+                elif sel_idx == -2:
+                    continue
         elif key == b'\r':  # ENTER
             if typed:
                 try:
