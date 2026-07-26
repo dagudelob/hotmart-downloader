@@ -322,9 +322,9 @@ async def api_login(req: LoginRequest):
                 course_structure[mod_order][mod_name] = []
                 
             pages = mod.get('pages') or mod.get('lessons') or []
-            for page in pages:
+            for idx_page, page in enumerate(pages, start=1):
                 page_name = page.get('name')
-                page_order = page.get('pageOrder') or page.get('order') or 1
+                page_order = page.get('pageOrder') or page.get('order') or idx_page
                 page_hash = page.get('hash') or page.get('id')
                 
                 # Check for videos and attachments
