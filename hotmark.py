@@ -103,7 +103,8 @@ def download_class_video(aula, modulo, folder_path_class, first_folder, authMart
     """
     Downloads native HLS videos or external streams (Vimeo, YouTube) for a given class.
     """
-    video_filename = f"{slugify(str(modulo))}.{slugify(str(aula[0]))}.mp4"
+    # Use a descriptive filename containing the class order and class name
+    video_filename = f"{slugify(str(aula[0]))}.{slugify(aula[1])}.mp4"
     folder_path_class_video = f'{folder_path_class}/{video_filename}'
 
     if os.path.isfile(folder_path_class_video):

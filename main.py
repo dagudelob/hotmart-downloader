@@ -349,14 +349,22 @@ async def api_login(req: LoginRequest):
             for mod_name, lessons in course_structure[mod_order].items():
                 formatted_lessons = []
                 for lesson in lessons:
-                    # Check if file exists on disk
+                    # Check if file exists on disk (support new descriptive name, old naming, and aula-X naming)
                     lesson_order = lesson[0]
                     lesson_name = lesson[1]
                     mod_slug = f"{slugify(str(mod_order))}_{slugify(mod_name)}"
                     class_slug = f"{slugify(str(lesson_order))}.{slugify(lesson_name)}"
                     
-                    expected_video_path = f"{first_folder}/{mod_slug}/{class_slug}/{slugify(mod_name)}.{slugify(str(lesson_order))}.mp4"
-                    downloaded_status = os.path.exists(expected_video_path) and os.path.getsize(expected_video_path) > 0
+                    candidate_paths = [
+                        # New Format: {order}.{name}.mp4
+                        f"{first_folder}/{mod_slug}/{class_slug}/{slugify(str(lesson_order))}.{slugify(lesson_name)}.mp4",
+                        # Legacy Format: {mod_name}.{order}.mp4
+                        f"{first_folder}/{mod_slug}/{class_slug}/{slugify(mod_name)}.{slugify(str(lesson_order))}.mp4",
+                        # Fallback Format: aula-{order}.mp4
+                        f"{first_folder}/{mod_slug}/{class_slug}/aula-{slugify(str(lesson_order))}.mp4"
+                    ]
+                    
+                    downloaded_status = any(os.path.exists(path) and os.path.getsize(path) > 0 for path in candidate_paths)
                     
                     formatted_lessons.append({
                         "order": lesson_order,
