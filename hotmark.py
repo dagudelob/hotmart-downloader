@@ -1399,12 +1399,12 @@ def listacursos(authMart, params):
                         google_drive_files = extrair_google_drive_urls(content_html)
                         
                         if google_drive_files:
-                            print(f"\n{len(google_drive_files)} archivo(s) incrustado(s) de Google Drive detectado(s) en el contenido HTML de la clase")
+                            print(f"\n{len(google_drive_files)} embedded Google Drive file(s) detected in the HTML content of the class")
                             
-                            folder_path_class_attach = f"{folder_path}/{slugify(str(aula[0]))}.{slugify(aula[1])}/Materiais"
+                            folder_path_class_attach = f"{folder_path}/{slugify(str(aula[0]))}.{slugify(aula[1])}/Materials"
                             if not os.path.exists(folder_path_class_attach):
                                 os.makedirs(folder_path_class_attach)
-                                loga(first_folder, "INFO", "Carpeta de materiales creada para archivos de Google Drive")
+                                loga(first_folder, "INFO", "Materials folder created for Google Drive files")
                             
                             gdrive_baixados = 0
                             gdrive_pulados = 0
@@ -1419,43 +1419,43 @@ def listacursos(authMart, params):
                                 if os.path.isfile(output_path):
                                     file_size = os.path.getsize(output_path)
                                     if file_size > 0:
-                                        print(f"      [OK] Ya existe ({file_size} bytes) - omitiendo")
-                                        loga(first_folder, "INFO", f"Archivo de Google Drive ya existente: {file_name}")
+                                        print(f"      [OK] Already exists ({file_size} bytes) - skipping")
+                                        loga(first_folder, "INFO", f"Google Drive file already exists: {file_name}")
                                         gdrive_pulados += 1
                                         continue
                                     else:
-                                        print("      [AVISO] El archivo existe pero está vacío - re-descargando")
+                                        print("      [WARNING] File exists but is empty - re-downloading")
                                         os.remove(output_path)
                                 
-                                print("      [DOWNLOAD] Descargando desde Google Drive...")
+                                print("      [DOWNLOAD] Downloading from Google Drive...")
                                 sucesso = baixar_google_drive(file_id, download_url, output_path, first_folder)
                                 
                                 if sucesso:
-                                    print("      [OK] Descargado con éxito")
+                                    print("      [OK] Downloaded successfully")
                                     gdrive_baixados += 1
                                 else:
-                                    print("      [ERROR] Fallo en la descarga")
+                                    print("      [ERROR] Download failed")
                                     gdrive_falhos += 1
                                 
                                 time.sleep(1)
                             
-                            print("\n  [RESUMEN] Archivos de Google Drive:")
-                            print(f"     Descargados: {gdrive_baixados}")
-                            print(f"     Omitidos: {gdrive_pulados}")
+                            print("\n  [SUMMARY] Google Drive Files:")
+                            print(f"     Downloaded: {gdrive_baixados}")
+                            print(f"     Skipped: {gdrive_pulados}")
                             if gdrive_falhos > 0:
-                                print(f"     Fallos: {gdrive_falhos}")
+                                print(f"     Failed: {gdrive_falhos}")
                             print()
                             
-                            loga(first_folder, "INFO", f"Google Drive files - Descargados: {gdrive_baixados}, Omitidos: {gdrive_pulados}, Fallos: {gdrive_falhos}")
+                            loga(first_folder, "INFO", f"Google Drive files - Downloaded: {gdrive_baixados}, Skipped: {gdrive_pulados}, Failed: {gdrive_falhos}")
                 
                 except Exception as e:
-                    loga(first_folder, "ERROR", f"Error al procesar contenido de Google Drive: {str(e)}")
+                    loga(first_folder, "ERROR", f"Error processing Google Drive content: {str(e)}")
 
-                # 5. Guardar enlaces externos/complementarios en links.txt
+                # 5. Save external/complementary links in links.txt
                 if aula[5]['links']:
-                    folder_path_class_attach = f"{folder_path}/{slugify(str(aula[0]))}.{slugify(aula[1])}/Materiais"
-                    print(f"Guardando enlaces encontrados para la clase en\n\t {folder_path_class_attach}")
-                    loga(first_folder, "INFO", f"Enlaces detectados para la clase {str(aula[0])}{aula[1]}")
+                    folder_path_class_attach = f"{folder_path}/{slugify(str(aula[0]))}.{slugify(aula[1])}/Materials"
+                    print(f"Saving links found for class in\n\t {folder_path_class_attach}")
+                    loga(first_folder, "INFO", f"Links detected for class {str(aula[0])} {aula[1]}")
                     folder_path_class_links = f"{folder_path_class_attach}/links.txt"
                     with open(folder_path_class_links, "a", encoding="utf-8") as linkz:
                         for i in aula[5]['links']:
