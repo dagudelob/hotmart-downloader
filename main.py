@@ -89,7 +89,13 @@ def start_downloads_background(lesson_ids: List[str]):
 
     # Find matching lessons in the structure
     lessons_to_download = []
-    first_folder = f"universo-hot-{domain_subdomain}"
+    # Normalize folder name to avoid duplicate prefixes
+    sub_clean = domain_subdomain
+    if sub_clean.startswith("universo-hot-"):
+        first_folder = sub_clean
+    else:
+        first_folder = f"universo-hot-{sub_clean}"
+        
     if not os.path.exists(first_folder):
         os.makedirs(first_folder)
 
@@ -326,19 +332,32 @@ async def api_login(req: LoginRequest):
                     page_hash,
                     {"videos": videos},
                     {"anexos": attachments},
-                    {"html_content": ""}
+                    {"links": []}
                 ])
                 
-        # Format course data for Frontend listing
+        # Format course data for Frontend listing, including local download detection
+        sub_clean = domain_subdomain
+        first_folder = sub_clean if sub_clean.startswith("universo-hot-") else f"universo-hot-{sub_clean}"
+        
         formatted_modules = []
         for mod_order in sorted(course_structure.keys()):
             for mod_name, lessons in course_structure[mod_order].items():
                 formatted_lessons = []
                 for lesson in lessons:
+                    # Check if file exists on disk
+                    lesson_order = lesson[0]
+                    lesson_name = lesson[1]
+                    mod_slug = f"{slugify(str(mod_order))}_{slugify(mod_name)}"
+                    class_slug = f"{slugify(str(lesson_order))}.{slugify(lesson_name)}"
+                    
+                    expected_video_path = f"{first_folder}/{mod_slug}/{class_slug}/{slugify(mod_name)}.{slugify(str(lesson_order))}.mp4"
+                    downloaded_status = os.path.exists(expected_video_path) and os.path.getsize(expected_video_path) > 0
+                    
                     formatted_lessons.append({
-                        "order": lesson[0],
-                        "name": lesson[1],
-                        "id": lesson[2]
+                        "order": lesson_order,
+                        "name": lesson_name,
+                        "id": lesson[2],
+                        "downloaded": downloaded_status
                     })
                 formatted_modules.append({
                     "order": mod_order,

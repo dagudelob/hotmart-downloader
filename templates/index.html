@@ -342,14 +342,16 @@
                 // Build lessons HTML
                 let lessonsHtml = '';
                 mod.lessons.forEach(les => {
+                    const badgeClass = les.downloaded ? 'bg-emerald-500/20 text-emerald-400' : 'hidden';
+                    const badgeText = les.downloaded ? 'Descargado' : 'Queued';
                     lessonsHtml += `
                         <div class="flex flex-col p-3 hover:bg-slate-900 border-t border-slate-900/50 transition">
                             <div class="flex items-center justify-between gap-4">
                                 <label class="flex items-center gap-3 cursor-pointer select-none text-sm text-slate-300 hover:text-white flex-1">
-                                    <input type="checkbox" value="${les.id}" class="lesson-checkbox rounded bg-slate-900 border-slate-800 text-brand-500 focus:ring-brand-500 focus:ring-offset-slate-950 w-4 h-4 transition">
-                                    <span>${les.order}. ${les.name}</span>
+                                    <input type="checkbox" value="${les.id}" class="lesson-checkbox rounded bg-slate-900 border-slate-800 text-brand-500 focus:ring-brand-500 focus:ring-offset-slate-950 w-4 h-4 transition" ${les.downloaded ? 'checked' : ''}>
+                                    <span class="${les.downloaded ? 'line-through text-slate-500' : ''}">${les.order}. ${les.name}</span>
                                 </label>
-                                <span id="status-badge-${les.id}" class="hidden px-2.5 py-0.5 rounded text-[10px] font-semibold tracking-wider uppercase">Queued</span>
+                                <span id="status-badge-${les.id}" class="${badgeClass} px-2.5 py-0.5 rounded text-[10px] font-semibold tracking-wider uppercase">${badgeText}</span>
                             </div>
                             <!-- Progress Bar Container -->
                             <div id="progress-container-${les.id}" class="hidden mt-2 space-y-1">
@@ -400,8 +402,12 @@
 
             lucide.createIcons();
 
-            // Re-bind checkboxes
+            // Re-bind checkboxes & pre-populate selected list
+            selectedLessonIds.clear();
             document.querySelectorAll('.lesson-checkbox').forEach(cb => {
+                if (cb.checked) {
+                    selectedLessonIds.add(cb.value);
+                }
                 cb.addEventListener('change', (e) => {
                     if (e.target.checked) {
                         selectedLessonIds.add(e.target.value);
@@ -411,6 +417,7 @@
                     updateSelectedCount();
                 });
             });
+            updateSelectedCount();
         }
 
         function updateSelectedCount() {

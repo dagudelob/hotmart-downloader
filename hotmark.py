@@ -156,9 +156,19 @@ def download_class_video(aula, modulo, folder_path_class, first_folder, authMart
                 ]
                 subprocess.run(yt_cmd, capture_output=True)
                 loga(first_folder, "INFO", "External video downloaded successfully.")
+                if progress_callback:
+                    try:
+                        progress_callback(100, 100, 100, "Successfully downloaded")
+                    except Exception:
+                        pass
                 break
         except Exception as e_ext:
             loga(first_folder, "WARN", f"Failed parsing external videos: {e_ext}")
+            if progress_callback:
+                try:
+                    progress_callback(0, 100, 0, f"Error: {str(e_ext)}")
+                except Exception:
+                    pass
         return
 
     # Case B: Native Hotmart HLS player
@@ -194,6 +204,11 @@ def download_class_video(aula, modulo, folder_path_class, first_folder, authMart
                     size_mb = os.path.getsize(folder_path_class_video) / (1024 * 1024)
                     print_color(f"[SUCCESS] Video downloaded successfully via yt-dlp ({size_mb:.2f} MB)")
                     loga(first_folder, "INFO", f"Video downloaded successfully via yt-dlp ({size_mb:.2f} MB)")
+                    if progress_callback:
+                        try:
+                            progress_callback(100, 100, 100, "Successfully downloaded")
+                        except Exception:
+                            pass
                     return
             except Exception as e_yt:
                 debug(f"[YTDLP] {e_yt}")
@@ -427,9 +442,19 @@ def download_class_video(aula, modulo, folder_path_class, first_folder, authMart
                 size_mb = os.path.getsize(dest_abs) / (1024 * 1024)
                 print_color(f"[SUCCESS] Video downloaded and saved to: {dest_abs} ({size_mb:.2f} MB)")
                 loga(first_folder, "INFO", f"Video saved ({size_mb:.2f} MB)")
+                if progress_callback:
+                    try:
+                        progress_callback(total_segmentos, total_segmentos, 100, "Successfully downloaded")
+                    except Exception:
+                        pass
             else:
                 print_color(f"[ERROR] FFMPEG failed: {proc.stderr}")
                 loga(first_folder, "ERROR", f"FFMPEG failed: {proc.stderr}")
+                if progress_callback:
+                    try:
+                        progress_callback(0, total_segmentos, 0, f"Error: FFMPEG assembly failed")
+                    except Exception:
+                        pass
         except Exception as e:
             os.chdir(cwd_actual)
             print_color(f"[ERROR] Subprocess error: {e}")
