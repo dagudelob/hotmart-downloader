@@ -18,9 +18,9 @@ def select_item_cli(options, title="Select an option:", show_exit=True):
     display_all = False
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
-        print("=====================================================================")
+        print("\033[94m=====================================================================\033[0m")
         print(" [ESC] Exit  |  [LEFT ARROW] Go Back  |  [C] " + ("Show paginated list" if display_all else "Show full list"))
-        print("=====================================================================")
+        print("\033[94m=====================================================================\033[0m")
         print(f"\n=== {title} ===")
         print("(Use UP/DOWN arrows to navigate, SPACE or ENTER to select.)\n")
         
@@ -87,9 +87,9 @@ def input_number_cli(prompt, min_val, max_val, title="Enter Range", options=None
     typed = ""
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
-        print("=====================================================================")
+        print("\033[94m=====================================================================\033[0m")
         print(" [ESC] Exit  |  [LEFT ARROW] Go Back" + ("  |  [C] Display list" if options else ""))
-        print("=====================================================================")
+        print("\033[94m=====================================================================\033[0m")
         print(f"\n=== {title} ===")
         print(prompt)
         print(f"> {typed}", end="", flush=True)
