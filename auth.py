@@ -32,7 +32,22 @@ def autenticacao(**kwargs):
         try:
             with open(env_file, "r", encoding="utf-8") as f:
                 for line in f:
-                    if ":" in line:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    # Standard KEY=VALUE format
+                    if "=" in line:
+                        k, v = line.split("=", 1)
+                        k = k.strip().lower()
+                        v = v.strip().strip('"\'')
+                        if k == "token":
+                            env_token = v
+                        elif k == "email":
+                            env_email = v
+                        elif k == "password":
+                            env_password = v
+                    # Legacy KEY: VALUE format
+                    elif ":" in line:
                         k, v = line.split(":", 1)
                         k = k.strip().lower()
                         v = v.strip().strip('"\'')
@@ -44,6 +59,9 @@ def autenticacao(**kwargs):
                             env_password = v
         except Exception:
             pass
+    # Also check OS environment variables as fallback
+    if not env_token:
+        env_token = os.environ.get("TOKEN", "")
 
     # If there is a saved token, use it immediately
     if env_token:

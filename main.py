@@ -125,19 +125,31 @@ def start_downloads_background(lesson_ids: List[str]):
 
 
 def _read_env_token() -> str:
-    """Read the saved Bearer token from .env file."""
+    """Read the saved Bearer token from .env file. Supports both KEY=VALUE and KEY: VALUE formats."""
     env_token = ""
     env_file = ".env" if os.path.exists(".env") else ("temp/.env" if os.path.exists("temp/.env") else None)
     if env_file:
         try:
             with open(env_file, "r", encoding="utf-8") as f:
                 for line in f:
-                    if ":" in line:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    # Support standard KEY=VALUE format
+                    if "=" in line:
+                        k, v = line.split("=", 1)
+                        if k.strip().upper() == "TOKEN":
+                            env_token = v.strip().strip('"\'')
+                    # Legacy support for KEY: VALUE format
+                    elif ":" in line:
                         k, v = line.split(":", 1)
                         if k.strip().lower() == "token":
                             env_token = v.strip().strip('"\'')
         except Exception:
             pass
+    # Also check OS environment variable as fallback
+    if not env_token:
+        env_token = os.environ.get("TOKEN", "")
     return env_token
 
 
@@ -242,13 +254,12 @@ async def get_index(request: Request):
 async def api_login(req: LoginRequest):
     global auth_session, auth_params, domain_subdomain, nav_headers_global, course_structure
     
-    # Save token in .env file
+    # Save token in .env using standard KEY=VALUE format (compatible with python-dotenv and VS Code)
     try:
         with open(".env", "w", encoding="utf-8") as f:
-            f.write(f"token: {req.token}\n")
+            f.write(f"TOKEN={req.token}\n")
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"Failed to save .env file: {str(e)}"})
-
     domain_subdomain = req.subdomain.strip()
     nav_headers_global = {
         'authority': 'api-club-course-consumption-gateway-ga.cb.hotmart.com',
