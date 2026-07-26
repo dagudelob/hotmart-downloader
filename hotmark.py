@@ -34,6 +34,17 @@ def fetch_course_navigation(authMart, dominio, nav_headers):
     Supports gateway fallback routing.
     Raises RuntimeError on failure instead of calling exit() so web server stays alive.
     """
+    # Pre-load x-product-id from config_cursos.py if available (avoids extra API round-trips)
+    if 'x-product-id' not in nav_headers:
+        try:
+            from config_cursos import CURSOS_SUBDOMINIOS
+            for item in CURSOS_SUBDOMINIOS:
+                if item.get("subdomain") == dominio and item.get("productId"):
+                    nav_headers['x-product-id'] = str(item["productId"])
+                    break
+        except Exception:
+            pass
+
     # First attempt: legacy API (no subdomain needed)
     resp_nav = authMart.get(
         'https://api-club.hotmart.com/hot-club-api/rest/v3/navigation',
@@ -48,20 +59,34 @@ def fetch_course_navigation(authMart, dominio, nav_headers):
         headers=nav_headers
     )
 
-    # Fallback to fetch productId if x-product-id header is required
+    # Fallback: fetch productId dynamically if still getting 400 x-product-id error
     if resp_nav.status_code == 400 and 'x-product-id' in resp_nav.text:
-        resp_mem = authMart.get(
+        for status_url in [
             f'https://api-club-course-consumption-gateway-ga.cb.hotmart.com/v1/user/{dominio}/status',
-            headers=nav_headers
-        )
-        if resp_mem.status_code == 200:
-            p_id = resp_mem.json().get('productId') or resp_mem.json().get('id')
-            if p_id:
-                nav_headers['x-product-id'] = str(p_id)
-                resp_nav = authMart.get(
-                    f'https://api-club-course-consumption-gateway-ga.cb.hotmart.com/v1/navigation?subdomain={dominio}',
-                    headers=nav_headers
-                )
+            f'https://api-club.hotmart.com/hot-club-api/rest/v3/membership?subdomain={dominio}',
+        ]:
+            try:
+                resp_mem = authMart.get(status_url, headers=nav_headers)
+                if resp_mem.status_code == 200:
+                    data = resp_mem.json()
+                    # Try multiple field names the API might use
+                    p_id = (
+                        data.get('productId') or
+                        data.get('product_id') or
+                        data.get('id') or
+                        data.get('resource', {}).get('productId') or
+                        data.get('resource', {}).get('id')
+                    )
+                    if p_id:
+                        nav_headers['x-product-id'] = str(p_id)
+                        resp_nav = authMart.get(
+                            f'https://api-club-course-consumption-gateway-ga.cb.hotmart.com/v1/navigation?subdomain={dominio}',
+                            headers=nav_headers
+                        )
+                        if resp_nav.status_code == 200:
+                            break
+            except Exception:
+                continue
 
     if resp_nav.status_code == 200:
         curso = resp_nav.json()
