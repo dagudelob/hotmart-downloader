@@ -66,7 +66,7 @@ def fetch_course_navigation(authMart, dominio, nav_headers):
         exit(1)
 
 
-def download_class_video(aula, modulo, folder_path_class, first_folder, authMart, nav_headers, dominio):
+def download_class_video(aula, modulo, folder_path_class, first_folder, authMart, nav_headers, dominio, progress_callback=None):
     """
     Downloads native HLS videos or external streams (Vimeo, YouTube) for a given class.
     """
@@ -341,6 +341,11 @@ def download_class_video(aula, modulo, folder_path_class, first_folder, authMart
 
             porcentaje = int((idx_seg / total_segmentos) * 100)
             print(f"\r[DESCARGA VIDEO] [{porcentaje:3d}%] Segment {idx_seg}/{total_segmentos}", end="", flush=True)
+            if progress_callback:
+                try:
+                    progress_callback(idx_seg, total_segmentos, porcentaje, f"Segment {idx_seg}/{total_segmentos}")
+                except Exception:
+                    pass
 
             local_seg_filename = os.path.basename(urlparse(seg_rel_uri).path)
             frag = authMart.get(seg_url, headers=player_headers)
@@ -353,6 +358,11 @@ def download_class_video(aula, modulo, folder_path_class, first_folder, authMart
         # Download decryption key if exists
         if key_uri:
             print_color(f"[HTTP] Downloading decryption key: {key_uri[:60]}...")
+            if progress_callback:
+                try:
+                    progress_callback(total_segmentos, total_segmentos, 95, "Downloading key...")
+                except Exception:
+                    pass
             key_url = key_uri if key_uri.startswith("http") else urljoin(variant_url, key_uri)
             var_q = urlparse(variant_url).query
             if var_q and not urlparse(key_url).query:
@@ -366,6 +376,11 @@ def download_class_video(aula, modulo, folder_path_class, first_folder, authMart
 
         # FFMPEG assembly
         print_color("[FFMPEG] Assembling .mp4 video...")
+        if progress_callback:
+            try:
+                progress_callback(total_segmentos, total_segmentos, 98, "Assembling with FFMPEG...")
+            except Exception:
+                pass
         dest_abs = os.path.abspath(folder_path_class_video)
         cwd_actual = os.getcwd()
         os.chdir("temp")
@@ -396,7 +411,7 @@ def download_class_video(aula, modulo, folder_path_class, first_folder, authMart
         loga(first_folder, "INFO", "Temporary folder cleared")
 
 
-def download_class_assets(aula, modulo, folder_path_class, first_folder, authMart, nav_headers, dominio):
+def download_class_assets(aula, modulo, folder_path_class, first_folder, authMart, nav_headers, dominio, progress_callback=None):
     """
     Downloads description, video attachments, embedded files, and links for a class.
     """
@@ -443,7 +458,7 @@ def download_class_assets(aula, modulo, folder_path_class, first_folder, authMar
         except Exception:
             pass
 
-    download_class_video(aula, modulo, folder_path_class, first_folder, authMart, nav_headers, dominio)
+    download_class_video(aula, modulo, folder_path_class, first_folder, authMart, nav_headers, dominio, progress_callback=progress_callback)
 
     # 3. Native attachments downloads
     if not aula[4]['anexos'] and 'lesson_json' in locals():

@@ -19,3 +19,5 @@ config_cursos.py
 __pycache__/
 *.pyc
 universo-hot-jamin/
+
+.agents
