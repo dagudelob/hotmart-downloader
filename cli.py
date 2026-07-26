@@ -19,7 +19,7 @@ def select_item_cli(options, title="Select an option:", show_exit=True):
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
         print("=====================================================================")
-        print(" [ESC] Exit  |  [F] Find/Type index directly  |  [C] " + ("Show paginated list" if display_all else "Show full list"))
+        print(" [ESC] Exit  |  [LEFT ARROW] Go Back  |  [C] " + ("Show paginated list" if display_all else "Show full list"))
         print("=====================================================================")
         print(f"\n=== {title} ===")
         print("(Use UP/DOWN arrows to navigate, SPACE or ENTER to select.)\n")
@@ -58,20 +58,6 @@ def select_item_cli(options, title="Select an option:", show_exit=True):
         elif key == b'\x03': # Ctrl+C
             print("\nOperation cancelled.")
             exit(0)
-        elif key == b'f' or key == b'F': # F shortcut - switch to typing mode
-            while True:
-                print(f"\nEnter the number (1 to {options_count}) to select: ")
-                typed = input("> ").strip()
-                try:
-                    num = int(typed) - 1
-                    if 0 <= num < options_count:
-                        if show_exit and num == options_count - 1:
-                            print("\nExiting program...")
-                            exit(0)
-                        return num
-                except ValueError:
-                    pass
-                print("Invalid index. Try again.")
         elif key == b'c' or key == b'C': # C shortcut - toggle full list / paginated list
             display_all = not display_all
         elif key == b'\r' or key == b' ': # Enter or Space
