@@ -30,7 +30,7 @@ websocket_clients: List[WebSocket] = []
 
 class LoginRequest(BaseModel):
     token: str
-    subdomain: str
+    subdomain: str = ""
 
 class DownloadRequest(BaseModel):
     lesson_ids: List[str]
@@ -124,13 +124,13 @@ def start_downloads_background(lesson_ids: List[str]):
     threading.Thread(target=worker, daemon=True).start()
 
 
-@app.get("/", response_class=HTMLResponse)
-async def get_index(request: Request):
-    # If token exists in .env, pre-fill it
+def _read_env_token() -> str:
+    """Read the saved Bearer token from .env file."""
     env_token = ""
-    if os.path.exists(".env"):
+    env_file = ".env" if os.path.exists(".env") else ("temp/.env" if os.path.exists("temp/.env") else None)
+    if env_file:
         try:
-            with open(".env", "r", encoding="utf-8") as f:
+            with open(env_file, "r", encoding="utf-8") as f:
                 for line in f:
                     if ":" in line:
                         k, v = line.split(":", 1)
@@ -138,6 +138,99 @@ async def get_index(request: Request):
                             env_token = v.strip().strip('"\'')
         except Exception:
             pass
+    return env_token
+
+
+@app.get("/api/subdomains")
+async def get_subdomains():
+    """
+    Returns a combined list of subdomains:
+    1. Saved subdomains from config_cursos.py
+    2. Auto-detected subdomains from Hotmart API using saved token
+    """
+    result = []
+    seen = set()
+
+    # 1. Load subdomains saved in config_cursos.py
+    try:
+        from config_cursos import CURSOS_SUBDOMINIOS
+        for item in CURSOS_SUBDOMINIOS:
+            sd = item.get("subdomain", "").strip()
+            if sd and sd not in seen:
+                result.append({"subdomain": sd, "source": "config", "name": sd})
+                seen.add(sd)
+    except Exception:
+        pass
+
+    # 2. Auto-detect from Hotmart API using saved token
+    token = _read_env_token()
+    if token:
+        if token.startswith("Bearer "):
+            token = token.replace("Bearer ", "").strip()
+        try:
+            import re as _re
+            import base64 as _b64
+            import json as _json
+            # Try to unwrap JWT inner access_token
+            parts = token.split(".")
+            if len(parts) == 3:
+                padded = parts[1] + "=" * (-len(parts[1]) % 4)
+                payload = _json.loads(_b64.b64decode(padded).decode("utf-8"))
+                if "access_token" in payload:
+                    token = payload["access_token"]
+        except Exception:
+            pass
+
+        headers = {
+            "authorization": f"Bearer {token}",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "accept": "application/json",
+        }
+        try:
+            resp = requests.get(
+                "https://api-club.hotmart.com/hot-club-api/rest/v3/membership",
+                headers=headers,
+                timeout=10
+            )
+            if resp.status_code == 200:
+                memberships = resp.json()
+                items = memberships if isinstance(memberships, list) else memberships.get("items", [])
+                for item in items:
+                    resource = item.get("resource", item)
+                    sd = resource.get("subdomain", "").strip()
+                    name = resource.get("name") or resource.get("productName") or sd
+                    if sd and sd not in seen:
+                        result.append({"subdomain": sd, "source": "api", "name": name})
+                        seen.add(sd)
+        except Exception:
+            pass
+
+        # Fallback: user/{subdomain}/status endpoint pattern
+        if not result:
+            try:
+                resp2 = requests.get(
+                    "https://api-club-course-consumption-gateway-ga.cb.hotmart.com/v1/memberships",
+                    headers=headers,
+                    timeout=10
+                )
+                if resp2.status_code == 200:
+                    data2 = resp2.json()
+                    items2 = data2 if isinstance(data2, list) else data2.get("items", [])
+                    for item in items2:
+                        sd = item.get("subdomain", "").strip()
+                        name = item.get("name") or sd
+                        if sd and sd not in seen:
+                            result.append({"subdomain": sd, "source": "api", "name": name})
+                            seen.add(sd)
+            except Exception:
+                pass
+
+    return {"subdomains": result, "token_present": bool(token)}
+
+
+@app.get("/", response_class=HTMLResponse)
+async def get_index(request: Request):
+    env_token = _read_env_token()
     return templates.TemplateResponse(request, "index.html", {"env_token": env_token})
 
 
@@ -215,7 +308,7 @@ async def api_login(req: LoginRequest):
                     "lessons": formatted_lessons
                 })
 
-        return {"status": "success", "modules": formatted_modules}
+        return {"status": "success", "modules": formatted_modules, "subdomain": domain_subdomain}
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
 
