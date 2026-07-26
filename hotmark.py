@@ -42,7 +42,7 @@ import glob
 # Import modular helper functions
 from utils import slugify
 from logger import loga, debug, http_log, set_debug_log, print_color
-from cli import select_item_cli
+from cli import select_item_cli, input_number_cli
 from auth import autenticacao
 from gdrive import extrair_google_drive_urls, baixar_google_drive
 
@@ -319,28 +319,16 @@ def listacursos(authMart, params):
         print(f"\n[+] Starting download for class: '{aula_sel[1]}'\n")
         
     elif modo_descarga == "3":
-        while True:
-            # Range validation loop
-            try:
-                print(f"\nTotal classes in the course: {len(todas_las_clases)}")
-                desde_input = input(f"Start downloading from class number? (1 to {len(todas_las_clases)}, or type 'exit' to quit): ").strip()
-                if desde_input.lower() == 'exit':
-                    print("\nExiting program...")
-                    exit(0)
-                desde = int(desde_input) - 1
-                
-                hasta_input = input(f"Download up to class number? ({desde + 1} to {len(todas_las_clases)}, or type 'exit' to quit): ").strip()
-                if hasta_input.lower() == 'exit':
-                    print("\nExiting program...")
-                    exit(0)
-                hasta = int(hasta_input) - 1
-                
-                if 0 <= desde < len(todas_las_clases) and desde <= hasta < len(todas_las_clases):
-                    break
-                else:
-                    print(f"\n[!] Option not available. Please enter a valid class range.")
-            except ValueError:
-                print(f"\n[!] Option not available. Please enter valid integers.")
+        total_clases = len(todas_las_clases)
+        desde = input_number_cli(
+            f"Start downloading from class number? (1 to {total_clases}):",
+            1, total_clases, title="Class Range Selection"
+        ) - 1
+        
+        hasta = input_number_cli(
+            f"Download up to class number? ({desde + 1} to {total_clases}):",
+            desde + 1, total_clases, title="Class Range Selection"
+        ) - 1
         
         print(f"\n[+] Seleccionado rango de clases del {desde + 1} al {hasta + 1}:")
         for i in range(desde, hasta + 1):

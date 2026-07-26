@@ -15,7 +15,10 @@ def select_item_cli(options, title="Select an option:", show_exit=True):
     
     # Ask the user if they want to digit index manually or scroll
     os.system('cls' if os.name == 'nt' else 'clear')
-    print(f"=== {title} ===")
+    print("=====================================================================")
+    print(" [ESC] Exit  |  [C] Display all content ")
+    print("=====================================================================")
+    print(f"\n=== {title} ===")
     print("Choose selection method:")
     print("1. Scroll/Navigate with keyboard arrows")
     print("2. Type/Digit the index number directly")
@@ -29,30 +32,70 @@ def select_item_cli(options, title="Select an option:", show_exit=True):
         elif k == b'\x1b': # ESC
             print("\nExiting program...")
             exit(0)
-            
-    if choice == "2":
-        # Digit mode
-        while True:
+        elif k == b'c' or k == b'C': # C shortcut
             os.system('cls' if os.name == 'nt' else 'clear')
-            print(f"=== {title} ===")
+            print(f"=== {title} (Full List) ===")
             for idx, opt in enumerate(display_options, start=1):
                 print(f"{idx:3d}. {opt}")
-            print(f"\nEnter the number (1 to {options_count}) or type 'exit' to quit:")
-            typed = input("> ").strip()
-            if typed.lower() == 'exit':
+            print("\nPress any key to return...")
+            msvcrt.getch()
+            # Reprint choice menu
+            os.system('cls' if os.name == 'nt' else 'clear')
+            print("=====================================================================")
+            print(" [ESC] Exit  |  [C] Display all content ")
+            print("=====================================================================")
+            print(f"\n=== {title} ===")
+            print("Choose selection method:")
+            print("1. Scroll/Navigate with keyboard arrows")
+            print("2. Type/Digit the index number directly")
+            
+    if choice == "2":
+        # Digit mode with direct key capture for instant ESC/C support
+        typed = ""
+        while True:
+            os.system('cls' if os.name == 'nt' else 'clear')
+            print("=====================================================================")
+            print(" [ESC] Exit  |  [C] Display all content ")
+            print("=====================================================================")
+            print(f"\n=== {title} ===")
+            print(f"Type the number (1 to {options_count}) and press ENTER to select:")
+            print(f"> {typed}", end="", flush=True)
+            
+            key = msvcrt.getch()
+            if key == b'\x1b':  # ESC
                 print("\nExiting program...")
                 exit(0)
-            try:
-                num = int(typed) - 1
-                if 0 <= num < options_count:
-                    if show_exit and num == options_count - 1:
-                        print("\nExiting program...")
-                        exit(0)
-                    return num
-            except ValueError:
-                pass
-            print("Invalid index. Press any key to retry...")
-            msvcrt.getch()
+            elif key == b'\x03':  # Ctrl+C
+                print("\nOperation cancelled.")
+                exit(0)
+            elif key == b'c' or key == b'C':  # C shortcut - display all content
+                os.system('cls' if os.name == 'nt' else 'clear')
+                print(f"=== {title} (Full List) ===")
+                for idx, opt in enumerate(display_options, start=1):
+                    print(f"{idx:3d}. {opt}")
+                print("\nPress any key to return...")
+                msvcrt.getch()
+            elif key == b'\r':  # ENTER
+                if typed:
+                    try:
+                        num = int(typed) - 1
+                        if 0 <= num < options_count:
+                            if show_exit and num == options_count - 1:
+                                print("\nExiting program...")
+                                exit(0)
+                            return num
+                    except ValueError:
+                        pass
+                typed = ""  # Reset on invalid input
+            elif key == b'\x08':  # Backspace
+                typed = typed[:-1]
+            else:
+                try:
+                    char = key.decode('utf-8')
+                    if char.isdigit():
+                        typed += char
+                except UnicodeDecodeError:
+                    pass
             
     # Scroll Mode
     selected = 0
@@ -126,3 +169,44 @@ def select_item_cli(options, title="Select an option:", show_exit=True):
                 selected = (selected - 1) % options_count
             elif arrow == b'P': # DOWN arrow
                 selected = (selected + 1) % options_count
+
+def input_number_cli(prompt, min_val, max_val, title="Enter Range"):
+    """
+    Reads a number character-by-character from standard console.
+    Supports ESC to exit instantly, and C to view any reference info if needed.
+    """
+    typed = ""
+    while True:
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print("=====================================================================")
+        print(" [ESC] Exit ")
+        print("=====================================================================")
+        print(f"\n=== {title} ===")
+        print(prompt)
+        print(f"> {typed}", end="", flush=True)
+        
+        key = msvcrt.getch()
+        if key == b'\x1b':  # ESC
+            print("\nExiting program...")
+            exit(0)
+        elif key == b'\x03':  # Ctrl+C
+            print("\nOperation cancelled.")
+            exit(0)
+        elif key == b'\r':  # ENTER
+            if typed:
+                try:
+                    num = int(typed)
+                    if min_val <= num <= max_val:
+                        return num
+                except ValueError:
+                    pass
+            typed = ""  # Reset if invalid
+        elif key == b'\x08':  # Backspace
+            typed = typed[:-1]
+        else:
+            try:
+                char = key.decode('utf-8')
+                if char.isdigit():
+                    typed += char
+            except UnicodeDecodeError:
+                pass
