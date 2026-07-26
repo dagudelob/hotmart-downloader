@@ -28,22 +28,20 @@
 # - Organiza todo en carpetas por módulo/clase
 
 import time
-import datetime
 import requests
 import m3u8  # pip install m3u8
 import re
 import os
 import json
-from urllib.parse import urljoin, urlparse, parse_qs, urlencode
+from urllib.parse import urljoin, urlparse, parse_qs
 from bs4 import BeautifulSoup  # pip install beautifulsoup4
-import youtube_dl  # pip install youtube_dl o yt-dlp
+
 import subprocess
 import glob
-import unicodedata
 
 # Import modular helper functions
 from utils import slugify
-from logger import loga, debug, http_log, set_debug_log
+from logger import loga, debug, http_log, set_debug_log, print_color
 from cli import select_item_cli
 from auth import autenticacao
 from gdrive import extrair_google_drive_urls, baixar_google_drive
@@ -51,8 +49,8 @@ from gdrive import extrair_google_drive_urls, baixar_google_drive
 
 def listacursos(authMart, params):
     """
-    Obtiene la lista de cursos asociados a la cuenta de Hotmart del usuario.
-    Posteriormente navega por la estructura de módulos, clases, videos y materiales para descargarlos.
+    Retrieves the list of courses associated with the user's Hotmart account.
+    Then navigates the modules, classes, videos, and materials structure to download them.
     """
     # Intenta obtener productos del endpoint check_token
     check_token_response = authMart.get('https://api-sec-vlc.hotmart.com/security/oauth/check_token', params=params).json()
@@ -180,21 +178,21 @@ def listacursos(authMart, params):
         exit(1)
 
 
-    # Selección de curso con bucle de validación y soporte de exit
+    # Course selection with validation loop and exit support
     cursor_opts = [f"{c['nome']} (subdomain: {c['resource']['subdomain']})" for c in cursosValidos]
     opcao = select_item_cli(cursor_opts, title=f"Cursos disponibles ({len(cursosValidos)} encontrado(s))")
     
     nmcurso = slugify(cursosValidos[opcao]['nome'])
 
-    loga(".", "INFO", f"Iniciando descarga del curso {nmcurso}")
+    loga(".", "INFO", f"Starting course download: {nmcurso}")
     loga(".", "INFO", f"{cursosValidos[opcao]}")
     
-    # Se guarda directamente en la carpeta actual del proyecto
+    # Save directory set to course root
     first_folder = f'{nmcurso}'
     if not os.path.exists(first_folder):
         os.makedirs(first_folder)
     
-    # Inicializar el log de debug detallado para todo el proceso del curso
+    # Initialize detailed debug log
     set_debug_log(first_folder)
     debug(f"=== Iniciando sesión de descarga para curso: {nmcurso} ===")
         
@@ -204,18 +202,18 @@ def listacursos(authMart, params):
 
     authMart.headers['club'] = dominio
     
-    # Obtiene el mapa completo de módulos y lecciones del curso (con fallback)
+    # Retrieve the complete map of course modules and lessons
     resp_nav = authMart.get('https://api-club.hotmart.com/hot-club-api/rest/v3/navigation')
     if resp_nav.status_code == 200 and 'modules' in resp_nav.json():
         curso = resp_nav.json()
     else:
-        # Petición al nuevo gateway de consumo con el token del usuario y encabezados requeridos
+        # Request to the new consumption gateway with authorization
         nav_headers = {
             'origin': 'https://hotmart.com',
             'referer': 'https://hotmart.com/',
             'x-app-name': 'app-club-consumer_v1.357.2_production'
         }
-        # Intentar obtener product_id si está en la información del recurso
+        # Try retrieving product_id from resource info
         prod_id = cursosValidos[opcao].get('resource', {}).get('productId') or cursosValidos[opcao].get('productId') or "1643794"
         nav_headers['x-product-id'] = str(prod_id)
 
@@ -224,9 +222,9 @@ def listacursos(authMart, params):
             headers=nav_headers
         )
         
-        # Si aún requiere x-product-id y no lo teníamos, intenta la ruta /v2/modules o /v1/modules
+        # If x-product-id is still required, try fetching from user status
         if resp_nav.status_code == 400 and 'x-product-id' in resp_nav.text:
-            # Probar obtener productos/membership para extraer productId
+            # Get membership info to extract productId
             resp_mem = authMart.get(f'https://api-club-course-consumption-gateway-ga.cb.hotmart.com/v1/user/{dominio}/status', headers=nav_headers)
             if resp_mem.status_code == 200:
                 p_id = resp_mem.json().get('productId') or resp_mem.json().get('id')
@@ -242,13 +240,13 @@ def listacursos(authMart, params):
             if 'modules' not in curso and 'data' in curso:
                 curso['modules'] = curso['data']
         else:
-            print(f"\n[ERROR] No se pudo obtener la lista de módulos (HTTP {resp_nav.status_code}):")
-            print(f"Respuesta de la API: {resp_nav.text[:300]}")
+            print_color(f"[ERROR] Could not retrieve modules list (HTTP {resp_nav.status_code}):")
+            print_color(f"[ERROR] API Response: {resp_nav.text[:300]}")
             exit(1)
 
     if 'modules' not in curso:
-        print(f"\n[ERROR] La estructura devuelta por la API no contiene 'modules'. Claves recibidas: {list(curso.keys())}")
-        print(f"Respuesta completa: {str(curso)[:300]}")
+        print_color(f"[ERROR] The structure returned by the API does not contain 'modules'. Received keys: {list(curso.keys())}")
+        print_color(f"[ERROR] Full response: {str(curso)[:300]}")
         exit(1)
 
     estrutura = {}
@@ -258,7 +256,7 @@ def listacursos(authMart, params):
     tempLink = []
     x = 0
 
-    loga(first_folder, "INFO", "Estructura obtenida con éxito, construyendo diccionario del curso")
+    loga(first_folder, "INFO", "Structure retrieved successfully, building course dictionary")
 
     for idx_mod, modulo in enumerate(curso['modules'], 1):
         mod_order = modulo.get('moduleOrder') or modulo.get('order') or idx_mod
@@ -277,7 +275,7 @@ def listacursos(authMart, params):
             aulas = [page_order, re.sub(r'[<>:"/\\|?*]', '', page_name).strip(), page_hash, {'videos': []},
                      {'anexos': []}, {'links': []}]
                      
-            # Si el menú de navegación trae las medias directamente en memoria
+            # If the navigation menu embeds media in memory
             medias = i.get('mediasSrc') or i.get('medias') or []
             for video in medias:
                 v_name = video.get('mediaName') or video.get('name') or 'video'
@@ -288,7 +286,7 @@ def listacursos(authMart, params):
 
             estrutura[mod_order][mod_name_clean].append(aulas)
 
-    # Guarda una copia de la estructura en debug.txt por si ocurre algún fallo
+    # Save a backup copy of the structure to debug.txt
     with open(first_folder + '/debug.txt', 'a', encoding='utf-8') as debug_file:
         debug_file.write(str(curso['modules']) + '\n\n\n' + str(estrutura))
 
@@ -354,7 +352,7 @@ def listacursos(authMart, params):
     # Iterate modules and classes to process downloads
     for modulo in estrutura:
         for aulas in estrutura[modulo]:
-            # Filtrar si el usuario eligió modo selectivo (1 o 3)
+            # Filter if selective download mode was chosen
             if (modo_descarga == "1" or modo_descarga == "3"):
                 clases_filtradas = [a for a in estrutura[modulo][aulas] if a[2] in clases_a_descargar]
                 if not clases_filtradas:
@@ -364,21 +362,21 @@ def listacursos(authMart, params):
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
 
-                loga(first_folder, "INFO", f"Creada la carpeta del módulo {str(modulo)}.{aulas}")
+                loga(first_folder, "INFO", f"Created module directory: {str(modulo)}.{aulas}")
 
             for aula in estrutura[modulo][aulas]:
-                # Si se seleccionó modo selectivo, omitir las demás
+                # If selective mode is enabled, skip non-selected classes
                 if (modo_descarga == "1" or modo_descarga == "3") and aula[2] not in clases_a_descargar:
                     continue
 
                 folder_path_class = f"{folder_path}/{slugify(str(aula[0]))}.{slugify(aula[1])}"
-                print(f"Verificando la clase\n\t {folder_path_class}")
+                print_color(f"[INFO] Verifying class: {folder_path_class}")
                 if not os.path.exists(folder_path_class):
                     os.makedirs(folder_path_class)
 
-                    loga(first_folder, "INFO", f"Creada la carpeta de la clase {slugify(str(aula[0]))}.{slugify(aula[1])}")
+                    loga(first_folder, "INFO", f"Created class directory: {slugify(str(aula[0]))}.{slugify(aula[1])}")
 
-                # 1. Obtener detalles de la clase (contenido HTML, anexos y links) únicamente para la clase seleccionada
+                # 1. Retrieve class details (HTML, attachments and links)
                 try:
                     resp_page = authMart.get(f'https://api-club.hotmart.com/hot-club-api/rest/v3/page/{aula[2]}')
                     lesson_json = {}
@@ -393,14 +391,14 @@ def listacursos(authMart, params):
                         lesson_json = resp_page.json()
                         desct = lesson_json.get('content') or lesson_json.get('description') or ''
                         
-                    # Extraer anexos si no venían cargados previamente
+                    # Extract attachments if not already cached
                     if not aula[4]['anexos']:
                         attachments = lesson_data.get('attachments') if 'lesson_data' in locals() else lesson_json.get('attachments', [])
                         for anexo in attachments:
                             tempAnexo = [anexo.get('fileMembershipId') or anexo.get('id'), re.sub(r'[<>:"/\\|?*]', '', anexo.get('fileName') or anexo.get('name') or 'anexo').strip()]
                             aula[4]['anexos'].append(tempAnexo)
 
-                    # Extraer links si no venían cargados previamente
+                    # Extract links if not already cached
                     if not aula[5]['links']:
                         links = lesson_json.get('complementaryReadings') or lesson_json.get('links') or []
                         for link in links:
@@ -410,12 +408,12 @@ def listacursos(authMart, params):
                     if desct:
                         with open(f"{folder_path_class}/descripcion.html", 'w', encoding='utf-8') as dd:
                             dd.write(str(desct))
-                            loga(first_folder, "INFO", f"Descripción guardada con éxito, clase {str(aula[0])}.{aula[1]}")
+                            loga(first_folder, "INFO", f"Description saved successfully for class: {str(aula[0])}.{aula[1]}")
                 except Exception as e_desc:
                     loga(first_folder, "ERROR", f"Fallo al guardar la descripción de la clase {str(aula[0])}. {aula[1]}: {e_desc}")
 
-                # 2. Descarga de videos
-                # Si no se habían extraído videos previamente, intentar consultar la lección en la API v2
+                # 2. Download videos
+                # Fetch lesson details from API v2 if video data is missing
                 if not aula[3]['videos']:
                     try:
                         resp_lesson = authMart.get(
@@ -445,7 +443,7 @@ def listacursos(authMart, params):
                             if 'player.vimeo' in i.get("src"):
                                 youtube_dl.utils.std_headers['Referer'] = f"https://{dominio}.club.hotmart.com/"
 
-                                loga(first_folder, "INFO", f"¡Vídeo de Vimeo encontrado! {i.get('src')}")
+                                loga(first_folder, "INFO", f"Vimeo video detected: {i.get('src')}")
 
                                 if '?' in i.get("src"):
                                     linkV = i.get("src").split('?')[0]
@@ -457,7 +455,7 @@ def listacursos(authMart, params):
                             elif 'vimeo.com' in i.get("src"):
                                 youtube_dl.utils.std_headers['Referer'] = f"https://{dominio}.club.hotmart.com/"
 
-                                loga(first_folder, "INFO", f"¡Vídeo de Vimeo encontrado! {i.get('src')}")
+                                loga(first_folder, "INFO", f"Vimeo video detected: {i.get('src')}")
 
                                 vimeoID = i.get("src").split('vimeo.com/')[1]
                                 if "?" in vimeoID:
@@ -469,20 +467,20 @@ def listacursos(authMart, params):
                                 pass
 
                             elif "youtube.com" in i.get("src") or "youtu.be" in i.get("src"):
-                                loga(first_folder, "INFO", f"¡Vídeo de YouTube encontrado! {i.get('src')}")
+                                loga(first_folder, "INFO", f"YouTube video detected: {i.get('src')}")
                                 linkV = i.get("src")
                                 
-                            # Cambiar nombre del video al formato módulo.clase.mp4
+                            # Format video filename as module.class.mp4
                             video_filename = f"{slugify(str(modulo))}.{slugify(str(aula[0]))}.mp4"
                             folder_path_class_video = f'{folder_path_class}/{video_filename}'
                             if not os.path.isfile(folder_path_class_video):
-                                print(f"Descargando clase externa\n\t {folder_path_class_video}")
+                                print(f"Downloading external class:\n\t {folder_path_class_video}")
                                 ydl_opts = {"format": "best", 'outtmpl': folder_path_class_video}
                                 with youtube_dl.YoutubeDL(ydl_opts) as ydl:
                                     ydl.download([linkV])
                                     loga(first_folder, "INFO", "External video downloaded successfully.")
                             else:
-                                print("Class already exists, skipping...")
+                                print_color("[INFO] Class already exists, skipping...")
                                 loga(first_folder, "INFO", "Clase ya presente. Omitida.")
 
                     except:
@@ -490,13 +488,13 @@ def listacursos(authMart, params):
                              "No videos found on the platform, checking if it is a text-only class.")
                         pass
 
-                else:  # Reproductor nativo de Hotmart (HLS m3u8)
+                else:  # Native Hotmart Player (HLS m3u8)
                     for x, i in enumerate(aula[3]['videos'], start=1):
                         video_filename = f"{slugify(str(modulo))}.{slugify(str(aula[0]))}.mp4"
                         folder_path_class_video = f'{folder_path_class}/{video_filename}'
                         if not os.path.isfile(folder_path_class_video):
-                            print(f"Intentando descargar clase de Hotmart\n\t {folder_path_class_video}")
-                            loga(first_folder, "INFO", f"Intentando descargar la clase {str(aula[0])} ({aula[1]})")
+                            print_color(f"[DOWNLOAD] Attempting to download Hotmart class: {video_filename}")
+                            loga(first_folder, "INFO", f"Attempting to download class: {str(aula[0])} ({aula[1]})")
 
                             mediaUrl = i[2]
                             videoHash = i[1]
@@ -510,7 +508,7 @@ def listacursos(authMart, params):
                             # Las firmas Akamai (hdnts) solo son válidas dentro de una sesión de
                             # navegador autenticada. yt-dlp puede usar esas cookies directamente.
                             # ─────────────────────────────────────────────────────────────────────
-                            print(f"[YTDLP] Intentando con cookies de Chrome: {mediaUrl[:70]}...")
+                            print_color(f"[YTDLP] Attempting with Chrome cookies: {mediaUrl[:70]}...")
                             debug(f"[YTDLP] Ejecutando yt-dlp --cookies-from-browser chrome sobre {mediaUrl}")
                             yt_cmd = [
                                 "yt-dlp",
@@ -531,11 +529,11 @@ def listacursos(authMart, params):
                                     print(f"[YTDLP] {res_yt.stderr[-300:]}")
                                 if os.path.exists(folder_path_class_video) and os.path.getsize(folder_path_class_video) > 0:
                                     size_mb = os.path.getsize(folder_path_class_video) / (1024 * 1024)
-                                    print(f"[OK] Video descargado con yt-dlp+cookies ({size_mb:.2f} MB)")
+                                    print_color(f"[INFO] Video downloaded successfully via yt-dlp+cookies ({size_mb:.2f} MB)")
                                     loga(first_folder, "INFO", f"Video descargado con yt-dlp+cookies ({size_mb:.2f} MB)")
                                     continue
                                 else:
-                                    print(f"[YTDLP WARN] yt-dlp no descargó el archivo, intentando extracción manual de HLS...")
+                                    print_color("[WARNING] yt-dlp did not download the file directly. Retrying HLS manual extraction...")
                                     debug("[YTDLP] Descarga directa falló, continuando con extracción manual")
                             except Exception as e_yt:
                                 print(f"[YTDLP ERROR] {e_yt}")
@@ -568,7 +566,7 @@ def listacursos(authMart, params):
                                 elif 'authorization' in authMart.headers:
                                     player_api_headers['authorization'] = authMart.headers['authorization']
 
-                                print(f"[HTTP API PLAYER] GET {player_api_url}")
+                                print_color(f"[HTTP] [API PLAYER] GET {player_api_url}")
                                 debug(f"[HTTP API PLAYER] GET {player_api_url}")
                                 debug(f"[HTTP API PLAYER] headers enviados: {player_api_headers}")
                                 try:
@@ -589,13 +587,13 @@ def listacursos(authMart, params):
                                             break
                                 except Exception as e_papi:
                                     debug(f"[HTTP API PLAYER EXCEPTION] {e_papi}")
-                                    print(f"[HTTP API PLAYER WARN] {e_papi}")
+                                    print_color(f"[WARNING] [API PLAYER] {e_papi}")
 
                             # ─────────────────────────────────────────────────────────────────────
                             # ESTRATEGIA 3: Parsear la página embed cf-embed para extraer m3u8
                             # ─────────────────────────────────────────────────────────────────────
                             if not hls_url and mediaUrl:
-                                print(f"[HTTP] Solicitando página embed: {mediaUrl[:75]}...")
+                                print_color(f"[HTTP] Requesting embed page: {mediaUrl[:75]}...")
                                 debug(f"[HTTP] GET embed page: {mediaUrl}")
                                 ticket_resp = authMart.get(mediaUrl, headers=nav_headers)
                                 http_log("GET", mediaUrl, ticket_resp.status_code, ticket_resp.text[:300])
@@ -656,7 +654,7 @@ def listacursos(authMart, params):
                                     f"https://api-club.hotmart.com/hot-club-api/rest/v3/media/{videoHash}/ticket"
                                 ]
                                 for ep in ticket_endpoints:
-                                    print(f"[HTTP] Consultando ticket endpoint: {ep[:70]}...")
+                                    print_color(f"[HTTP] Querying ticket endpoint: {ep[:70]}...")
                                     debug(f"[HTTP] GET ticket: {ep}")
                                     t_resp = authMart.get(ep, headers=nav_headers)
                                     http_log("GET", ep, t_resp.status_code, t_resp.text[:300])
@@ -671,7 +669,7 @@ def listacursos(authMart, params):
                                             pass
 
                             if not hls_url:
-                                print(f"[ERROR] No se pudo obtener la URL HLS para {videoHash}. Revisa debug.log en la carpeta del curso.")
+                                print_color(f"[ERROR] Could not obtain HLS URL for {videoHash}. Please review debug.log inside the course folder.")
                                 loga(first_folder, "ERROR", f"No se obtuvo hls_url para videoHash={videoHash}")
                                 debug(f"[ERROR] Todas las estrategias fallaron para {videoHash}")
                                 continue
@@ -685,7 +683,7 @@ def listacursos(authMart, params):
                                 'Referer': mediaUrl if mediaUrl else 'https://cf-embed.play.hotmart.com/'
                             }
 
-                            print(f"[HTTP] Solicitando master playlist desde: {hls_url[:80]}...")
+                            print_color(f"[HTTP] Requesting master playlist from: {hls_url[:80]}...")
                             debug(f"[HTTP] GET master playlist: {hls_url}")
                             teste = authMart.get(hls_url, headers=player_headers)
                             http_log("GET", hls_url, teste.status_code, teste.text[:300])
@@ -696,7 +694,7 @@ def listacursos(authMart, params):
                                 http_log("GET (retry referer)", hls_url, teste.status_code, teste.text[:300])
 
                             if teste.status_code != 200:
-                                print(f"[ERROR] HTTP {teste.status_code} al obtener master playlist")
+                                print_color(f"[ERROR] HTTP {teste.status_code} retrieving master playlist")
                                 debug(f"[ERROR] master playlist response body:\n{teste.text[:1000]}")
                                 loga(first_folder, "ERROR", f"HTTP {teste.status_code} en master playlist")
                                 continue
@@ -711,7 +709,7 @@ def listacursos(authMart, params):
                             else:
                                 highestQual_uri = ""
 
-                            print(f"[INFO] Variantes detectadas. URI seleccionada: {highestQual_uri}")
+                            print_color(f"[INFO] Variants detected. Selected URI: {highestQual_uri}")
 
                             # Resolver la URL completa de la variante resolviendo rutas relativas y preservando token si existe
                             if highestQual_uri.startswith("http"):
@@ -724,16 +722,16 @@ def listacursos(authMart, params):
                                 if base_parsed.query and not var_parsed.query:
                                     variant_url = f"{variant_url}?{base_parsed.query}"
 
-                            print(f"[HTTP] Descargando manifiesto de calidad variante desde: {variant_url[:80]}...")
+                            print_color(f"[HTTP] Downloading variant manifest from: {variant_url[:80]}...")
                             highqual = authMart.get(variant_url, headers=player_headers)
 
                             if highqual.status_code != 200:
-                                print(f"[ERROR] HTTP {highqual.status_code} al obtener la playlist de calidad")
+                                print_color(f"[ERROR] HTTP {highqual.status_code} obtaining variant quality playlist")
                                 continue
 
                             targetm3u8 = m3u8.loads(highqual.text)
                             total_segmentos = len(targetm3u8.segments)
-                            print(f"[INFO] Total de fragmentos de video a descargar: {total_segmentos}")
+                            print_color(f"[INFO] Total video segments to download: {total_segmentos}")
 
                             # Reescribir dump.m3u8 apuntando a los archivos .ts locales (sin query string ni path)
                             # FFMPEG no puede resolver URLs con ?hdntl= como archivos locales
@@ -787,7 +785,7 @@ def listacursos(authMart, params):
                             loga(first_folder, "INFO", f"Todos los {total_segmentos} fragmentos HLS descargados correctamente")
 
                             if key_uri:
-                                print(f"[HTTP] Descargando llave de descifrado: {key_uri[:60]}...")
+                                print_color(f"[HTTP] Downloading decryption key: {key_uri[:60]}...")
                                 if key_uri.startswith("http"):
                                     key_url = key_uri
                                 else:
@@ -800,9 +798,9 @@ def listacursos(authMart, params):
                                 fragkey = authMart.get(key_url, headers=player_headers)
                                 with open("temp/" + local_key_filename, 'wb') as skey:
                                     skey.write(fragkey.content)
-                                print("[OK] Llave de descifrado descargada correctamente")
+                                print_color("[INFO] Decryption key downloaded successfully")
 
-                            print("[FFMPEG] Ensamblando video .mp4...")
+                            print_color("[FFMPEG] Assembling .mp4 video...")
                             dest_abs = os.path.abspath(folder_path_class_video)
                             
                             # Comando FFMPEG ejecutado directamente en la carpeta temp
@@ -810,21 +808,21 @@ def listacursos(authMart, params):
                             os.chdir("temp")
                             ffmpegcmd = f'ffmpeg -y -hide_banner -loglevel warning -allowed_extensions ALL -protocol_whitelist file,http,https,tcp,tls,crypto -i dump.m3u8 -c copy "{dest_abs}"'
 
-                            loga(first_folder, "INFO", "Ejecutando FFMPEG")
+                            loga(first_folder, "INFO", "Executing FFMPEG")
                             try:
                                 proc = subprocess.run(ffmpegcmd, shell=True, capture_output=True, text=True)
                                 os.chdir(cwd_actual)
                                 
                                 if os.path.exists(dest_abs) and os.path.getsize(dest_abs) > 0:
                                     size_mb = os.path.getsize(dest_abs) / (1024 * 1024)
-                                    print(f"¡ÉXITO! Video descargado y guardado en: {dest_abs} ({size_mb:.2f} MB)")
+                                    print_color(f"[INFO] SUCCESS! Video downloaded and saved to: {dest_abs} ({size_mb:.2f} MB)")
                                     loga(first_folder, "INFO", f"Video guardado ({size_mb:.2f} MB)")
                                 else:
-                                    print(f"[ERROR FFMPEG]: {proc.stderr}")
+                                    print_color(f"[ERROR] FFMPEG failed: {proc.stderr}")
                                     loga(first_folder, "ERROR", f"FFMPEG fallo: {proc.stderr}")
                             except Exception as e:
                                 os.chdir(cwd_actual)
-                                print(f"[ERROR SUBPROCESS]: {e}")
+                                print_color(f"[ERROR] Subprocess error: {e}")
 
                             time.sleep(1)
                             for f in glob.glob("temp/*"):
@@ -836,17 +834,17 @@ def listacursos(authMart, params):
 
                             loga(first_folder, "INFO", "Temporary folder cleared")
                         else:
-                            print("Class already exists, skipping...")
+                            print_color("[INFO] Class already exists, skipping...")
                             loga(first_folder, "INFO", "Clase ya presente, omitida")
 
-                # 3. Descarga de archivos adjuntos nativos de la clase (PDFs, ZIPs, etc.)
+                # 3. Download native attachments (PDFs, ZIPs, etc.)
                 if aula[4]['anexos']:
-                    print(f"\n{len(aula[4]['anexos'])} anexo(s) encontrado(s) para la clase: {aula[1]}")
+                    print_color(f"\n[INFO] {len(aula[4]['anexos'])} attachment(s) found for class: {aula[1]}")
                     folder_path_class_attach = f"{folder_path}/{slugify(str(aula[0]))}.{slugify(aula[1])}/Materiais"
                     if not os.path.exists(folder_path_class_attach):
                         os.makedirs(folder_path_class_attach)
                         loga(first_folder, "INFO",
-                             f"Carpeta de materiales creada en la clase {str(aula[0])}. {aula[1]}")
+                             f"Materials directory created for class: {str(aula[0])}. {aula[1]}")
                     
                     anexos_baixados = 0
                     anexos_pulados = 0
@@ -862,13 +860,13 @@ def listacursos(authMart, params):
                         if os.path.isfile(folder_path_class_attach_file):
                             file_size = os.path.getsize(folder_path_class_attach_file)
                             if file_size > 0:
-                                print(f"      [OK] Ya existe ({file_size} bytes) - omitiendo")
-                                loga(first_folder, "INFO", f"Anexo ya existente: {anexo_nome} ({file_size} bytes)")
+                                print_color(f"      [OK] Already exists ({file_size} bytes) - skipping")
+                                loga(first_folder, "INFO", f"Attachment already exists: {anexo_nome} ({file_size} bytes)")
                                 anexos_pulados += 1
                                 continue
                             else:
-                                print("      [AVISO] El archivo existe pero está vacío - re-descargando")
-                                loga(first_folder, "WARN", f"Anexo vacío detectado, re-descargando: {anexo_nome}")
+                                print_color("      [WARNING] File exists but is empty - re-downloading")
+                                loga(first_folder, "WARN", f"Empty attachment detected, re-downloading: {anexo_nome}")
                                 os.remove(folder_path_class_attach_file)
                         
                         max_tentativas = 3
@@ -877,10 +875,10 @@ def listacursos(authMart, params):
                         for tentativa in range(1, max_tentativas + 1):
                             try:
                                 if tentativa > 1:
-                                    print(f"      [REINTENTO] Reintento {tentativa}/{max_tentativas}...")
+                                    print_color(f"      [WARNING] Retrying {tentativa}/{max_tentativas}...")
                                     time.sleep(2)
                                 
-                                loga(first_folder, "INFO", f"Descargando anexo {anexo_nome} (intento {tentativa})")
+                                loga(first_folder, "INFO", f"Downloading attachment: {anexo_nome} (intento {tentativa})")
                                 
                                 response = authMart.get(
                                     f'https://api-club.hotmart.com/hot-club-api/rest/v3/attachment/{anexo_id}/download',
@@ -893,14 +891,14 @@ def listacursos(authMart, params):
                                 anexo_info = response.json()
                                 
                                 if 'directDownloadUrl' in anexo_info:
-                                    print("      [DOWNLOAD] Descargando vía directDownloadUrl...")
+                                    print_color("      [DOWNLOAD] Downloading via directDownloadUrl...")
                                     anexo = requests.get(anexo_info['directDownloadUrl'], timeout=60)
                                     
                                     if anexo.status_code != 200:
                                         raise Exception(f"Error al descargar: HTTP {anexo.status_code}")
                                 
                                 elif 'lambdaUrl' in anexo_info:
-                                    print("      [DOWNLOAD] Descargando vía lambdaUrl...")
+                                    print_color("      [DOWNLOAD] Downloading via lambdaUrl...")
                                     vrum = requests.session()
                                     vrum.headers.update(authMart.headers)
                                     vrum.headers['token'] = anexo_info.get('token', '')
@@ -928,8 +926,8 @@ def listacursos(authMart, params):
                                 if file_size == 0:
                                     raise Exception("El archivo guardado está vacío")
                                 
-                                print(f"      [OK] Descargado con éxito ({file_size} bytes)")
-                                loga(first_folder, "INFO", f"Anexo descargado: {anexo_nome} ({file_size} bytes)")
+                                print_color(f"      [OK] Downloaded successfully ({file_size} bytes)")
+                                loga(first_folder, "INFO", f"Attachment downloaded: {anexo_nome} ({file_size} bytes)")
                                 anexos_baixados += 1
                                 sucesso = True
                                 break
@@ -939,7 +937,7 @@ def listacursos(authMart, params):
                                 loga(first_folder, "ERROR", f"Error al descargar anexo {anexo_nome} (intento {tentativa}): {erro_msg}")
                                 
                                 if tentativa == max_tentativas:
-                                    print(f"      [ERROR] FALTA tras {max_tentativas} intentos: {erro_msg}")
+                                    print_color(f"      [ERROR] FAILED after {max_tentativas} attempts: {erro_msg}")
                                     anexos_falhos += 1
                                     
                                     if os.path.exists(folder_path_class_attach_file):
@@ -948,21 +946,21 @@ def listacursos(authMart, params):
                                         except:
                                             pass
                                 else:
-                                    print(f"      [AVISO] Error: {erro_msg}")
+                                    print_color(f"      [WARNING] Error: {erro_msg}")
                         
                         if sucesso:
                             time.sleep(0.5)
                     
-                    print("\n  [RESUMEN] Anexos:")
-                    print(f"     Descargados: {anexos_baixados}")
-                    print(f"     Omitidos: {anexos_pulados}")
+                    print_color("\n  [SUMMARY] Attachments:")
+                    print(f"     Downloaded: {anexos_baixados}")
+                    print(f"     Skipped: {anexos_pulados}")
                     if anexos_falhos > 0:
-                        print(f"     Fallos: {anexos_falhos}")
+                        print_color(f"     Failed: {anexos_falhos}")
                     print()
                     
-                    loga(first_folder, "INFO", f"Anexos procesados - Descargados: {anexos_baixados}, Omitidos: {anexos_pulados}, Fallos: {anexos_falhos}")
+                    loga(first_folder, "INFO", f"Attachments processed - Downloaded: {anexos_baixados}, Omitidos: {anexos_pulados}, Fallos: {anexos_falhos}")
 
-                # 4. Procesar archivos PDF de Google Drive incrustados en la lección HTML
+                # 4. Process embedded Google Drive PDFs from HTML
                 try:
                     aula_completa = authMart.get(f'https://api-club.hotmart.com/hot-club-api/rest/v3/page/{aula[2]}').json()
                     content_html = aula_completa.get('content', '')

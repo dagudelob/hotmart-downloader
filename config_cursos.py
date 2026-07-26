@@ -1,14 +1,14 @@
-# Configuração de cursos Hotmart
-# Se a API não conseguir listar seus cursos automaticamente, adicione-os aqui
+# Hotmart Course Configuration
+# If the API cannot automatically list your courses, add them here.
 # 
-# Para encontrar o subdomínio do seu curso:
-# 1. Acesse https://sun.hotmart.com/minhas-compras
-# 2. Clique em "Acessar" no curso desejado  
-# 3. Na URL você verá: https://hotmart.com/pt-br/club/SUBDOMAIN/...
-# 4. O "SUBDOMAIN" é o que você deve adicionar abaixo
+# To find your course subdomain:
+# 1. Go to https://sun.hotmart.com/minhas-compras
+# 2. Click "Access" on the desired course
+# 3. Inside the URL you will see: https://hotmart.com/en/club/SUBDOMAIN/...
+# 4. The "SUBDOMAIN" is what you must add below
 #
-# Exemplo: se a URL é https://hotmart.com/pt-br/club/punchneedlelucrativo/...
-# então o subdomínio é: punchneedlelucrativo
+# Example: if the URL is https://hotmart.com/en/club/punchneedlelucrativo/...
+# then the subdomain is: punchneedlelucrativo
 
 CURSOS_SUBDOMINIOS = [
     {"subdomain": "universo-hot-jamin", "productId": "1643794"},

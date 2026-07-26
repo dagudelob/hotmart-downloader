@@ -3,7 +3,7 @@ import glob
 import requests
 import json
 import base64
-from logger import loga
+from logger import loga, print_color
 
 def autenticacao(**kwargs):
     """
@@ -47,7 +47,7 @@ def autenticacao(**kwargs):
 
     # If there is a saved token, use it immediately
     if env_token:
-        print("[+] A saved Token was detected in the .env file. Using token automatically...")
+        print_color("[INFO] A saved Token was detected in the .env file. Using token automatically...")
         if env_token.startswith("Bearer "):
             env_token = env_token.replace("Bearer ", "").strip()
             
@@ -81,7 +81,7 @@ def autenticacao(**kwargs):
             email = input("Enter your registered Hotmart email:\n").strip()
             
         loga(".", "INFO", f"Requesting OTP code to {email}")
-        print(f"\n[+] Requesting verification code to: {email} ...")
+        print_color(f"[INFO] Requesting verification code to: {email} ...")
         
         try:
             resp = authMart.post(
@@ -95,11 +95,11 @@ def autenticacao(**kwargs):
                 timeout=15
             )
             if resp.status_code in [200, 201, 204]:
-                print(f"Verification code successfully sent to {email}!")
+                print_color(f"[INFO] Verification code successfully sent to {email}!")
             else:
-                print(f"[WARNING] HTTP Status {resp.status_code}: {resp.text[:200]}")
+                print_color(f"[WARNING] HTTP Status {resp.status_code}: {resp.text[:200]}")
         except Exception as e:
-            print(f"[WARNING] Could not automatically request verification code: {e}")
+            print_color(f"[WARNING] Could not automatically request verification code: {e}")
 
         print("\nCheck your inbox or spam in Hotmart.")
         token_input = input("Enter the received OTP code (or Bearer Token): ").strip()
@@ -142,8 +142,8 @@ def autenticacao(**kwargs):
         loga(".", "INFO", "Authentication successful!")
         authSparkle_json = authSparkle.json()
     else:
-        print(f"\n[ERROR] Error authenticating against Hotmart (HTTP {authSparkle.status_code}):")
-        print(f"API Response: {authSparkle.text[:300]}")
+        print_color(f"[ERROR] Error authenticating against Hotmart (HTTP {authSparkle.status_code}):")
+        print_color(f"[ERROR] API Response: {authSparkle.text[:300]}")
         loga(".", "ERROR", f"Authentication failed. HTTP status: {authSparkle.status_code}")
         loga(".", "ERROR", f"{authSparkle.text}")
         try:
@@ -154,7 +154,7 @@ def autenticacao(**kwargs):
     try:
         params = {'token': authSparkle_json['access_token']}
     except KeyError:
-        print("\nInvalid email or password, or Sparkle API failure. Exiting...")
+        print_color("[ERROR] Invalid email or password, or Sparkle API failure. Exiting...")
         loga(".", "ERROR", "Token not found. Access credentials may be invalid or API has changed.")
         loga(".", "ERROR", f"{authSparkle.text}")
         exit(13)
