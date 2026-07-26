@@ -270,9 +270,32 @@ async def api_login(req: LoginRequest):
     }
 
     try:
-        # Authenticate using auth.py logic
-        auth_session, auth_params = autenticacao()
-        nav_headers_global['authorization'] = auth_session.headers['authorization']
+        # Build auth session directly from the provided Bearer token (no CLI interaction needed)
+        import requests as req_lib
+        import base64, json as _json
+
+        token = req.token.strip()
+        if token.startswith("Bearer "):
+            token = token.replace("Bearer ", "").strip()
+
+        # Try to unwrap JWT inner access_token if present
+        try:
+            parts = token.split(".")
+            if len(parts) == 3:
+                padded = parts[1] + "=" * (-len(parts[1]) % 4)
+                payload = _json.loads(base64.b64decode(padded).decode("utf-8"))
+                if "access_token" in payload:
+                    token = payload["access_token"]
+        except Exception:
+            pass
+
+        auth_session = req_lib.Session()
+        auth_session.headers.update({
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "authorization": f"Bearer {token}"
+        })
+        auth_params = {"token": token}
+        nav_headers_global['authorization'] = f"Bearer {token}"
         
         # Load course structure/navigation
         from hotmark import fetch_course_navigation
