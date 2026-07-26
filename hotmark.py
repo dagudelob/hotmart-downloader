@@ -691,102 +691,135 @@ def listacursos(authMart, params):
         print_color("\n[ERROR] Could not connect or validate membership for the provided subdomains.")
         exit(1)
 
-    cursor_opts = [f"{c['nome']} (subdomain: {c['resource']['subdomain']})" for c in cursosValidos]
-    opcao = select_item_cli(cursor_opts, title=f"Cursos disponibles ({len(cursosValidos)} encontrado(s))")
+    wizard_state = 1
     
-    nmcurso = slugify(cursosValidos[opcao]['nome'])
-    first_folder = f'{nmcurso}'
-    if not os.path.exists(first_folder):
-        os.makedirs(first_folder)
-    
-    set_debug_log(first_folder)
-    debug(f"=== Starting download session for course: {nmcurso} ===")
-        
-    dominio = cursosValidos[opcao]['resource']['subdomain']
-    authMart.headers['origin'] = f'https://{dominio}.club.hotmart.com/'
-    authMart.headers['referer'] = f'https://{dominio}.club.hotmart.com/'
-    authMart.headers['club'] = dominio
-
-    nav_headers = {
-        'origin': 'https://hotmart.com',
-        'referer': 'https://hotmart.com/',
-        'x-app-name': 'app-club-consumer_v1.357.2_production'
-    }
-    prod_id = cursosValidos[opcao].get('resource', {}).get('productId') or cursosValidos[opcao].get('productId') or "1643794"
-    nav_headers['x-product-id'] = str(prod_id)
-
-    curso = fetch_course_navigation(authMart, dominio, nav_headers)
-    
-    estrutura = {}
-    x = 0
-    for idx_mod, modulo in enumerate(curso['modules'], 1):
-        mod_order = modulo.get('moduleOrder') or modulo.get('order') or idx_mod
-        mod_name = modulo.get('name') or f"Modulo_{mod_order}"
-        mod_name_clean = re.sub(r'[<>:"/\\|?*]', '', mod_name).strip()
-        estrutura[mod_order] = {mod_name_clean: []}
-        
-        paginas = modulo.get('pages') or modulo.get('lessons') or modulo.get('contents') or []
-        for idx_page, i in enumerate(paginas, 1):
-            x += 1
-            page_order = i.get('pageOrder') or i.get('order') or idx_page
-            page_name = i.get('name') or i.get('title') or f"Clase_{page_order}"
-            page_hash = i.get('hash') or i.get('id') or i.get('code')
+    while True:
+        if wizard_state == 1:
+            cursor_opts = [f"{c['nome']} (subdomain: {c['resource']['subdomain']})" for c in cursosValidos]
+            opcao = select_item_cli(cursor_opts, title=f"Cursos disponibles ({len(cursosValidos)} encontrado(s))")
+            if opcao == -2:
+                continue
             
-            aulas = [page_order, re.sub(r'[<>:"/\\|?*]', '', page_name).strip(), page_hash, {'videos': []},
-                     {'anexos': []}, {'links': []}]
-                     
-            medias = i.get('mediasSrc') or i.get('medias') or []
-            for video in medias:
-                v_name = video.get('mediaName') or video.get('name') or 'video'
-                v_code = video.get('mediaCode') or video.get('code') or video.get('id')
-                v_url = video.get('mediaSrcUrl') or video.get('url') or video.get('src')
-                aulas[3]['videos'].append([re.sub(r'[<>:"/\\|?*]', '', v_name).strip(), v_code, v_url])
-
-            estrutura[mod_order][mod_name_clean].append(aulas)
-
-    with open(first_folder + '/debug.txt', 'a', encoding='utf-8') as debug_file:
-        debug_file.write(str(curso['modules']) + '\n\n\n' + str(estrutura))
-
-    loga(first_folder, "INFO", "Dictionary created successfully, exported as debug.txt")
-    loga(first_folder, "INFO", f"Total classes in the course {nmcurso}: {str(x)}")
-
-    download_modes = [
-        "Download ONLY 1 specific class/video (Step-by-step)",
-        "Download the ENTIRE course",
-        "Download a RANGE of classes (From X to Y)"
-    ]
-    selected_mode_idx = select_item_cli(download_modes, title="DOWNLOAD MODE")
-    modo_descarga = str(selected_mode_idx + 1)
-    
-    clases_a_descargar = []
-    todas_las_clases = []
-    for modulo in estrutura:
-        for nome_mod in estrutura[modulo]:
-            for aula_item in estrutura[modulo][nome_mod]:
-                todas_las_clases.append((modulo, nome_mod, aula_item))
+            nmcurso = slugify(cursosValidos[opcao]['nome'])
+            first_folder = f'{nmcurso}'
+            if not os.path.exists(first_folder):
+                os.makedirs(first_folder)
+            
+            set_debug_log(first_folder)
+            debug(f"=== Starting download session for course: {nmcurso} ===")
                 
-    if modo_descarga == "1":
-        class_options = [f"[{nome_mod}] {aula_item[1]}" for (modulo, nome_mod, aula_item) in todas_las_clases]
-        idx_clase = select_item_cli(class_options, title="Available classes list")
-        _, _, aula_sel = todas_las_clases[idx_clase]
-        clases_a_descargar.append(aula_sel[2])
-        print_color(f"[INFO] Starting download for class: '{aula_sel[1]}'")
-        
-    elif modo_descarga == "3":
-        total_clases = len(todas_las_clases)
-        desde = input_number_cli(
-            f"Start downloading from class number? (1 to {total_clases}):",
-            1, total_clases, title="Class Range Selection"
-        ) - 1
-        
-        hasta = input_number_cli(
-            f"Download up to class number? ({desde + 1} to {total_clases}):",
-            desde + 1, total_clases, title="Class Range Selection"
-        ) - 1
-        
-        for i in range(desde, hasta + 1):
-            _, _, aula_sel = todas_las_clases[i]
-            clases_a_descargar.append(aula_sel[2])
+            dominio = cursosValidos[opcao]['resource']['subdomain']
+            authMart.headers['origin'] = f'https://{dominio}.club.hotmart.com/'
+            authMart.headers['referer'] = f'https://{dominio}.club.hotmart.com/'
+            authMart.headers['club'] = dominio
+
+            nav_headers = {
+                'origin': 'https://hotmart.com',
+                'referer': 'https://hotmart.com/',
+                'x-app-name': 'app-club-consumer_v1.357.2_production'
+            }
+            prod_id = cursosValidos[opcao].get('resource', {}).get('productId') or cursosValidos[opcao].get('productId') or "1643794"
+            nav_headers['x-product-id'] = str(prod_id)
+
+            curso = fetch_course_navigation(authMart, dominio, nav_headers)
+            
+            estrutura = {}
+            x = 0
+            for idx_mod, modulo in enumerate(curso['modules'], 1):
+                mod_order = modulo.get('moduleOrder') or modulo.get('order') or idx_mod
+                mod_name = modulo.get('name') or f"Modulo_{mod_order}"
+                mod_name_clean = re.sub(r'[<>:"/\\|?*]', '', mod_name).strip()
+                estrutura[mod_order] = {mod_name_clean: []}
+                
+                paginas = modulo.get('pages') or modulo.get('lessons') or modulo.get('contents') or []
+                for idx_page, i in enumerate(paginas, 1):
+                    x += 1
+                    page_order = i.get('pageOrder') or i.get('order') or idx_page
+                    page_name = i.get('name') or i.get('title') or f"Clase_{page_order}"
+                    page_hash = i.get('hash') or i.get('id') or i.get('code')
+                    
+                    aulas = [page_order, re.sub(r'[<>:"/\\|?*]', '', page_name).strip(), page_hash, {'videos': []},
+                             {'anexos': []}, {'links': []}]
+                             
+                    medias = i.get('mediasSrc') or i.get('medias') or []
+                    for video in medias:
+                        v_name = video.get('mediaName') or video.get('name') or 'video'
+                        v_code = video.get('mediaCode') or video.get('code') or video.get('id')
+                        v_url = video.get('mediaSrcUrl') or video.get('url') or video.get('src')
+                        aulas[3]['videos'].append([re.sub(r'[<>:"/\\|?*]', '', v_name).strip(), v_code, v_url])
+
+                    estrutura[mod_order][mod_name_clean].append(aulas)
+
+            with open(first_folder + '/debug.txt', 'a', encoding='utf-8') as debug_file:
+                debug_file.write(str(curso['modules']) + '\n\n\n' + str(estrutura))
+
+            loga(first_folder, "INFO", "Dictionary created successfully, exported as debug.txt")
+            loga(first_folder, "INFO", f"Total classes in the course {nmcurso}: {str(x)}")
+            
+            wizard_state = 2
+
+        elif wizard_state == 2:
+            download_modes = [
+                "Download ONLY 1 specific class/video (Step-by-step)",
+                "Download the ENTIRE course",
+                "Download a RANGE of classes (From X to Y)"
+            ]
+            selected_mode_idx = select_item_cli(download_modes, title="DOWNLOAD MODE")
+            if selected_mode_idx == -2:
+                wizard_state = 1
+                continue
+                
+            modo_descarga = str(selected_mode_idx + 1)
+            
+            clases_a_descargar = []
+            todas_las_clases = []
+            for modulo in estrutura:
+                for nome_mod in estrutura[modulo]:
+                    for aula_item in estrutura[modulo][nome_mod]:
+                        todas_las_clases.append((modulo, nome_mod, aula_item))
+            
+            wizard_state = 3
+
+        elif wizard_state == 3:
+            if modo_descarga == "1":
+                class_options = [f"[{nome_mod}] {aula_item[1]}" for (modulo, nome_mod, aula_item) in todas_las_clases]
+                idx_clase = select_item_cli(class_options, title="Available classes list")
+                if idx_clase == -2:
+                    wizard_state = 2
+                    continue
+                _, _, aula_sel = todas_las_clases[idx_clase]
+                clases_a_descargar.append(aula_sel[2])
+                print_color(f"[INFO] Starting download for class: '{aula_sel[1]}'")
+                break
+                
+            elif modo_descarga == "3":
+                total_clases = len(todas_las_clases)
+                class_names = [f"[{nome_mod}] {aula_item[1]}" for (modulo, nome_mod, aula_item) in todas_las_clases]
+                
+                desde = input_number_cli(
+                    f"Start downloading from class number? (1 to {total_clases}):",
+                    1, total_clases, title="Class Range Selection", options=class_names
+                )
+                if desde == -2:
+                    wizard_state = 2
+                    continue
+                desde = desde - 1
+                
+                hasta = input_number_cli(
+                    f"Download up to class number? ({desde + 1} to {total_clases}):",
+                    desde + 1, total_clases, title="Class Range Selection", options=class_names
+                )
+                if hasta == -2:
+                    wizard_state = 2
+                    continue
+                hasta = hasta - 1
+                
+                for i in range(desde, hasta + 1):
+                    _, _, aula_sel = todas_las_clases[i]
+                    clases_a_descargar.append(aula_sel[2])
+                break
+            else:
+                break
 
     # Loop through course components and download assets
     for moduloOrder in estrutura:

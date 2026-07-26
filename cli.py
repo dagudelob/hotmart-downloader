@@ -32,6 +32,10 @@ def select_item_cli(options, title="Select an option:", show_exit=True):
         elif k == b'\x1b': # ESC
             print("\nExiting program...")
             exit(0)
+        elif k == b'\xe0': # Special key
+            arrow = msvcrt.getch()
+            if arrow == b'K': # Left arrow
+                return -2
         elif k == b'c' or k == b'C': # C shortcut
             os.system('cls' if os.name == 'nt' else 'clear')
             print(f"=== {title} (Full List) ===")
@@ -89,6 +93,10 @@ def select_item_cli(options, title="Select an option:", show_exit=True):
                 typed = ""  # Reset on invalid input
             elif key == b'\x08':  # Backspace
                 typed = typed[:-1]
+            elif key == b'\xe0':  # Special key
+                arrow = msvcrt.getch()
+                if arrow == b'K':  # LEFT arrow
+                    return -2
             else:
                 try:
                     char = key.decode('utf-8')
@@ -169,17 +177,24 @@ def select_item_cli(options, title="Select an option:", show_exit=True):
                 selected = (selected - 1) % options_count
             elif arrow == b'P': # DOWN arrow
                 selected = (selected + 1) % options_count
+            elif arrow == b'K': # LEFT arrow
+                return -2
+            elif arrow == b'M': # RIGHT arrow
+                if show_exit and selected == options_count - 1:
+                    print("\nExiting program...")
+                    exit(0)
+                return selected
 
-def input_number_cli(prompt, min_val, max_val, title="Enter Range"):
+def input_number_cli(prompt, min_val, max_val, title="Enter Range", options=None):
     """
     Reads a number character-by-character from standard console.
-    Supports ESC to exit instantly, and C to view any reference info if needed.
+    Supports ESC to exit instantly, LEFT arrow to go back, and C to view list of options.
     """
     typed = ""
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
         print("=====================================================================")
-        print(" [ESC] Exit ")
+        print(" [ESC] Exit  |  [LEFT ARROW] Go Back" + ("  |  [C] Display list" if options else ""))
         print("=====================================================================")
         print(f"\n=== {title} ===")
         print(prompt)
@@ -192,6 +207,14 @@ def input_number_cli(prompt, min_val, max_val, title="Enter Range"):
         elif key == b'\x03':  # Ctrl+C
             print("\nOperation cancelled.")
             exit(0)
+        elif key == b'c' or key == b'C':  # C shortcut
+            if options:
+                os.system('cls' if os.name == 'nt' else 'clear')
+                print(f"=== {title} (Full List) ===")
+                for idx, opt in enumerate(options, start=1):
+                    print(f"{idx:3d}. {opt}")
+                print("\nPress any key to return...")
+                msvcrt.getch()
         elif key == b'\r':  # ENTER
             if typed:
                 try:
@@ -203,6 +226,10 @@ def input_number_cli(prompt, min_val, max_val, title="Enter Range"):
             typed = ""  # Reset if invalid
         elif key == b'\x08':  # Backspace
             typed = typed[:-1]
+        elif key == b'\xe0':  # Special key
+            arrow = msvcrt.getch()
+            if arrow == b'K':  # LEFT arrow
+                return -2
         else:
             try:
                 char = key.decode('utf-8')
