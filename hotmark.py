@@ -139,72 +139,36 @@ def download_class_video(aula, modulo, folder_path_class, first_folder, authMart
         debug(f"=== Starting download video hash={videoHash} ===")
         debug(f"mediaUrl: {mediaUrl}")
 
-        # Strategy 1: yt-dlp with Chrome cookies directly
-        print_color(f"[YTDLP] Attempting with Chrome cookies: {mediaUrl[:70]}...")
-        yt_cmd = [
-            "yt-dlp",
-            "--cookies-from-browser", "chrome",
-            "--referer", f"https://{dominio}.club.hotmart.com/",
-            "--add-header", "Origin:https://cf-embed.play.hotmart.com",
-            "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "--no-warnings",
-            "-o", os.path.abspath(folder_path_class_video),
-            mediaUrl
-        ]
-        try:
-            res_yt = subprocess.run(yt_cmd, capture_output=True, text=True)
-            if os.path.exists(folder_path_class_video) and os.path.getsize(folder_path_class_video) > 0:
-                size_mb = os.path.getsize(folder_path_class_video) / (1024 * 1024)
-                print_color(f"[SUCCESS] Video downloaded successfully via yt-dlp+cookies ({size_mb:.2f} MB)")
-                loga(first_folder, "INFO", f"Video downloaded successfully via yt-dlp+cookies ({size_mb:.2f} MB)")
-                return
-            else:
-                print_color("[WARNING] yt-dlp did not download the file directly. Retrying HLS manual extraction...")
-        except Exception as e_yt:
-            print_color(f"[ERROR] [YTDLP] {e_yt}")
+        # Determine if it's a native Hotmart player embed
+        is_native_hotmart = mediaUrl and any(d in mediaUrl for d in ['cf-embed.play.hotmart.com', 'play.hotmart.com', 'hotmart.com/embed'])
 
-        # Strategy 2: Extract jwtToken & query player assets
+        # Strategy 1: yt-dlp (Only for external domains, skip for native Hotmart player)
+        if not is_native_hotmart:
+            print_color(f"[YTDLP] Attempting with Chrome cookies: {mediaUrl[:70]}...")
+            yt_cmd = [
+                "yt-dlp",
+                "--cookies-from-browser", "chrome",
+                "--referer", f"https://{dominio}.club.hotmart.com/",
+                "--add-header", "Origin:https://cf-embed.play.hotmart.com",
+                "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "--no-warnings",
+                "-o", os.path.abspath(folder_path_class_video),
+                mediaUrl
+            ]
+            try:
+                res_yt = subprocess.run(yt_cmd, capture_output=True, text=True)
+                if os.path.exists(folder_path_class_video) and os.path.getsize(folder_path_class_video) > 0:
+                    size_mb = os.path.getsize(folder_path_class_video) / (1024 * 1024)
+                    print_color(f"[SUCCESS] Video downloaded successfully via yt-dlp ({size_mb:.2f} MB)")
+                    loga(first_folder, "INFO", f"Video downloaded successfully via yt-dlp ({size_mb:.2f} MB)")
+                    return
+            except Exception as e_yt:
+                debug(f"[YTDLP] {e_yt}")
+
         hls_url = None
-        jwt_in_url = None
-        if mediaUrl and 'jwtToken=' in mediaUrl:
-            try:
-                qs_m = parse_qs(urlparse(mediaUrl).query)
-                if 'jwtToken' in qs_m:
-                    jwt_in_url = qs_m['jwtToken'][0]
-            except Exception:
-                pass
 
-        for api_path in ["v2", "v1"]:
-            player_api_url = f"https://api-player.hotmart.com/{api_path}/media/{videoHash}/assets"
-            player_api_headers = {
-                'origin': 'https://cf-embed.play.hotmart.com',
-                'referer': mediaUrl or 'https://cf-embed.play.hotmart.com/',
-                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
-            if jwt_in_url:
-                player_api_headers['authorization'] = f'Bearer {jwt_in_url}'
-            elif 'authorization' in authMart.headers:
-                player_api_headers['authorization'] = authMart.headers['authorization']
-
-            print_color(f"[HTTP] [API PLAYER] GET {player_api_url}")
-            try:
-                resp_p = authMart.get(player_api_url, headers=player_api_headers)
-                if resp_p.status_code == 200:
-                    p_data = resp_p.json()
-                    assets = p_data.get('assets', [])
-                    for a_item in assets:
-                        if a_item.get('url') and 'm3u8' in a_item.get('url'):
-                            hls_url = a_item.get('url')
-                            break
-                    if not hls_url:
-                        hls_url = p_data.get('mediaSrcUrl') or p_data.get('url') or p_data.get('hlsUrl')
-                    if hls_url:
-                        break
-            except Exception as e_papi:
-                print_color(f"[WARNING] [API PLAYER] {e_papi}")
-
-        # Strategy 3: Parse embed page HTML
-        if not hls_url and mediaUrl:
+        # Strategy 2: Direct Embed Page HTML Extraction (Primary for Native Hotmart)
+        if mediaUrl:
             print_color(f"[HTTP] Requesting embed page: {mediaUrl[:75]}...")
             ticket_resp = authMart.get(mediaUrl, headers=nav_headers)
             if ticket_resp.status_code == 200:
@@ -244,6 +208,45 @@ def download_class_video(aula, modulo, folder_path_class, first_folder, authMart
                     if hls_url:
                         from urllib.parse import unquote
                         hls_url = unquote(hls_url)
+
+        # Strategy 3: API Player Fallback (if embed page didn't yield m3u8)
+        if not hls_url:
+            jwt_in_url = None
+            if mediaUrl and 'jwtToken=' in mediaUrl:
+                try:
+                    qs_m = parse_qs(urlparse(mediaUrl).query)
+                    if 'jwtToken' in qs_m:
+                        jwt_in_url = qs_m['jwtToken'][0]
+                except Exception:
+                    pass
+
+            for api_path in ["v2", "v1"]:
+                player_api_url = f"https://api-player.hotmart.com/{api_path}/media/{videoHash}/assets"
+                player_api_headers = {
+                    'origin': 'https://cf-embed.play.hotmart.com',
+                    'referer': mediaUrl or 'https://cf-embed.play.hotmart.com/',
+                    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
+                if jwt_in_url:
+                    player_api_headers['authorization'] = f'Bearer {jwt_in_url}'
+                elif 'authorization' in authMart.headers:
+                    player_api_headers['authorization'] = authMart.headers['authorization']
+
+                try:
+                    resp_p = authMart.get(player_api_url, headers=player_api_headers)
+                    if resp_p.status_code == 200:
+                        p_data = resp_p.json()
+                        assets = p_data.get('assets', [])
+                        for a_item in assets:
+                            if a_item.get('url') and 'm3u8' in a_item.get('url'):
+                                hls_url = a_item.get('url')
+                                break
+                        if not hls_url:
+                            hls_url = p_data.get('mediaSrcUrl') or p_data.get('url') or p_data.get('hlsUrl')
+                        if hls_url:
+                            break
+                except Exception as e_papi:
+                    debug(f"[API PLAYER] {e_papi}")
 
         # Strategy 4: Fallback ticket endpoints
         if not hls_url:
