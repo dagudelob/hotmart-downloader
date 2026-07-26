@@ -529,7 +529,7 @@ def listacursos(authMart, params):
                                     print(f"[YTDLP] {res_yt.stderr[-300:]}")
                                 if os.path.exists(folder_path_class_video) and os.path.getsize(folder_path_class_video) > 0:
                                     size_mb = os.path.getsize(folder_path_class_video) / (1024 * 1024)
-                                    print_color(f"[INFO] Video downloaded successfully via yt-dlp+cookies ({size_mb:.2f} MB)")
+                                    print_color(f"[SUCCESS] Video downloaded successfully via yt-dlp+cookies ({size_mb:.2f} MB)")
                                     loga(first_folder, "INFO", f"Video descargado con yt-dlp+cookies ({size_mb:.2f} MB)")
                                     continue
                                 else:
@@ -815,7 +815,7 @@ def listacursos(authMart, params):
                                 
                                 if os.path.exists(dest_abs) and os.path.getsize(dest_abs) > 0:
                                     size_mb = os.path.getsize(dest_abs) / (1024 * 1024)
-                                    print_color(f"[INFO] SUCCESS! Video downloaded and saved to: {dest_abs} ({size_mb:.2f} MB)")
+                                    print_color(f"[SUCCESS] Video downloaded and saved to: {dest_abs} ({size_mb:.2f} MB)")
                                     loga(first_folder, "INFO", f"Video guardado ({size_mb:.2f} MB)")
                                 else:
                                     print_color(f"[ERROR] FFMPEG failed: {proc.stderr}")

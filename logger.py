@@ -8,12 +8,15 @@ def print_color(msg):
     """
     Colorizes terminal output alerts using ANSI escape codes:
     - [ERROR] or [ERROR ...] in Red
+    - [SUCCESS] in Dark Green (ANSI 256-color code 28)
     - [INFO] in Orange/Brown (ANSI 256-color code 208)
     - [HTTP], [YTDLP], [FFMPEG], [DOWNLOAD], [WARNING] etc. in Yellow
     """
     msg_str = str(msg)
     if "[ERROR]" in msg_str or "[ERROR" in msg_str:
         print(f"\033[91m{msg_str}\033[0m")
+    elif "[SUCCESS]" in msg_str:
+        print(f"\033[38;5;28m{msg_str}\033[0m")
     elif "[INFO]" in msg_str:
         print(f"\033[38;5;208m{msg_str}\033[0m")
     elif any(tag in msg_str for tag in ["[HTTP]", "[YTDLP]", "[FFMPEG]", "[DOWNLOAD]", "[WARNING]", "[AVISO]", "[REINTENTO]", "[TICKET", "[JWT", "[EMBED", "[HLS", "[DESCARGA VIDEO]"]):
