@@ -42,7 +42,7 @@ def select_item_cli(options, title="Select an option:", show_exit=True):
         for i in range(start_idx, end_idx):
             opt = display_options[i]
             if i == selected:
-                print(f" > [x] {i + 1:3d}. {opt}")
+                print(f"\033[33m > [x] {i + 1:3d}. {opt}\033[0m")
             else:
                 print(f"   [ ] {i + 1:3d}. {opt}")
                 
