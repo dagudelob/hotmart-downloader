@@ -298,7 +298,10 @@ async def api_login(req: LoginRequest):
         auth_session = req_lib.Session()
         auth_session.headers.update({
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "authorization": f"Bearer {token}"
+            "authorization": f"Bearer {token}",
+            "origin": f"https://{domain_subdomain}.club.hotmart.com",
+            "referer": f"https://{domain_subdomain}.club.hotmart.com/",
+            "club": domain_subdomain
         })
         auth_params = {"token": token}
         nav_headers_global['authorization'] = f"Bearer {token}"
