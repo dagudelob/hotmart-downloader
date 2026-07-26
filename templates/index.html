@@ -117,14 +117,19 @@
                         <i data-lucide="list-video" class="w-5 h-5 text-brand-500"></i>
                         <h2 class="font-semibold text-lg text-white">Módulos y Clases</h2>
                     </div>
-                    <div class="flex items-center gap-4 text-sm">
+                    <div class="flex items-center gap-3 text-sm">
+                        <!-- Sort toggle button -->
+                        <button id="btn-sort" title="Cambiar orden" class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-700 text-slate-400 hover:text-brand-500 hover:border-brand-500/50 transition text-xs font-medium">
+                            <i data-lucide="arrow-up-down" class="w-3.5 h-3.5"></i>
+                            <span id="sort-label">Asc</span>
+                        </button>
                         <button id="btn-select-all" class="text-slate-400 hover:text-brand-500 transition font-medium">Seleccionar Todo</button>
                         <button id="btn-deselect-all" class="text-slate-400 hover:text-brand-500 transition font-medium">Deseleccionar Todo</button>
                     </div>
                 </div>
 
                 <!-- Modules List container -->
-                <div id="modules-container" class="space-y-4 max-h-[65vh] overflow-y-auto pr-2"></div>
+                <div id="modules-container" class="space-y-2 max-h-[65vh] overflow-y-auto pr-2"></div>
             </div>
             
             <!-- Default Placeholder -->
@@ -313,14 +318,28 @@
         });
 
         // Render modules into list
+        let allModules = [];
+        let sortAsc = true;
+
         function renderModules(modules) {
+            allModules = modules;
+            renderSorted();
+        }
+
+        function renderSorted() {
             const container = document.getElementById('modules-container');
             container.innerHTML = '';
 
-            modules.forEach(mod => {
+            const sorted = [...allModules].sort((a, b) =>
+                sortAsc ? a.order - b.order : b.order - a.order
+            );
+
+            sorted.forEach((mod, idx) => {
+                const isFirst = idx === 0;
                 const modEl = document.createElement('div');
                 modEl.className = 'border border-slate-800 rounded-lg overflow-hidden bg-slate-950';
 
+                // Build lessons HTML
                 let lessonsHtml = '';
                 mod.lessons.forEach(les => {
                     lessonsHtml += `
@@ -344,22 +363,44 @@
                 });
 
                 modEl.innerHTML = `
-                    <div class="flex items-center justify-between p-4 bg-slate-900/80 cursor-pointer font-semibold text-sm text-slate-200 select-none">
+                    <div class="module-header flex items-center justify-between p-4 bg-slate-900/80 cursor-pointer font-semibold text-sm text-slate-200 select-none hover:bg-slate-900 transition">
                         <div class="flex items-center gap-2">
                             <span class="text-xs text-brand-500 bg-brand-500/10 px-2 py-0.5 rounded border border-brand-500/20">Módulo ${mod.order}</span>
                             <span class="text-white">${mod.name}</span>
                         </div>
-                        <span class="text-xs text-slate-400 font-normal">${mod.lessons.length} clases</span>
+                        <div class="flex items-center gap-3">
+                            <span class="text-xs text-slate-400 font-normal">${mod.lessons.length} clases</span>
+                            <i data-lucide="chevron-down" class="chevron-icon w-4 h-4 text-slate-400 transition-transform duration-300 ${isFirst ? 'rotate-0' : '-rotate-90'}"></i>
+                        </div>
                     </div>
-                    <div class="lessons-list">
+                    <div class="lessons-list overflow-hidden transition-all duration-300 ${isFirst ? '' : 'hidden'}">
                         ${lessonsHtml}
                     </div>
                 `;
 
+                // Collapse/expand click handler
+                const header = modEl.querySelector('.module-header');
+                const lessonsList = modEl.querySelector('.lessons-list');
+                const chevron = modEl.querySelector('.chevron-icon');
+                header.addEventListener('click', () => {
+                    const isOpen = !lessonsList.classList.contains('hidden');
+                    if (isOpen) {
+                        lessonsList.classList.add('hidden');
+                        chevron.classList.add('-rotate-90');
+                        chevron.classList.remove('rotate-0');
+                    } else {
+                        lessonsList.classList.remove('hidden');
+                        chevron.classList.add('rotate-0');
+                        chevron.classList.remove('-rotate-90');
+                    }
+                });
+
                 container.appendChild(modEl);
             });
 
-            // Re-bind checkboxes events
+            lucide.createIcons();
+
+            // Re-bind checkboxes
             document.querySelectorAll('.lesson-checkbox').forEach(cb => {
                 cb.addEventListener('change', (e) => {
                     if (e.target.checked) {
@@ -375,6 +416,13 @@
         function updateSelectedCount() {
             document.getElementById('selected-count').innerText = selectedLessonIds.size;
         }
+
+        // Sort toggle
+        document.getElementById('btn-sort').addEventListener('click', () => {
+            sortAsc = !sortAsc;
+            document.getElementById('sort-label').innerText = sortAsc ? 'Asc' : 'Desc';
+            renderSorted();
+        });
 
         // Selection buttons
         document.getElementById('btn-select-all').addEventListener('click', () => {
