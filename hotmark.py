@@ -635,24 +635,34 @@ def download_class_assets(aula, modulo, folder_path_class, first_folder, authMar
                 gdrive_pulados = 0
                 gdrive_falhos = 0
                 
-                for idx, (file_id, preview_url, download_url) in enumerate(google_drive_files, 1):
-                    file_name = f"gdrive_{file_id}.pdf"
-                    output_path = f"{folder_path_class_attach}/{file_name}"
-                    print(f"  [{idx}/{len(google_drive_files)}] {file_name}")
+                for idx, (file_id, preview_url, download_url, type_hint) in enumerate(google_drive_files, 1):
+                    # We look for any existing file starting with gdrive_{file_id}
+                    base_name = f"gdrive_{file_id}"
+                    existing_files = glob.glob(os.path.join(folder_path_class_attach, f"{base_name}.*"))
                     
-                    if os.path.isfile(output_path):
-                        file_size = os.path.getsize(output_path)
+                    if existing_files:
+                        first_existing = existing_files[0]
+                        file_size = os.path.getsize(first_existing)
                         if file_size > 0:
+                            print_color(f"  [{idx}/{len(google_drive_files)}] {os.path.basename(first_existing)}")
                             print_color(f"      [OK] Already exists ({file_size} bytes) - skipping")
                             gdrive_pulados += 1
                             continue
                         else:
+                            print_color(f"  [{idx}/{len(google_drive_files)}] {os.path.basename(first_existing)}")
                             print_color("      [WARNING] File exists but is empty - re-downloading")
-                            os.remove(output_path)
-                    
+                            try:
+                                os.remove(first_existing)
+                            except:
+                                pass
+
+                    print(f"  [{idx}/{len(google_drive_files)}] {base_name} (downloading...)")
                     print("      [DOWNLOAD] Downloading from Google Drive...")
-                    if baixar_google_drive(file_id, download_url, output_path, first_folder):
-                        print_color("      [OK] Downloaded successfully")
+                    output_path_base = os.path.join(folder_path_class_attach, base_name)
+                    
+                    success, final_path = baixar_google_drive(file_id, download_url, output_path_base, first_folder)
+                    if success:
+                        print_color(f"      [OK] Downloaded successfully: {os.path.basename(final_path)}")
                         gdrive_baixados += 1
                     else:
                         print_color("      [ERROR] Download failed")
