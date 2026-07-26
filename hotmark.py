@@ -226,7 +226,7 @@ def autenticacao(**kwargs):
 
     # Si hay un token guardado en .env, utilizarlo directamente sin preguntas
     if env_token:
-        print("[+] Se detectó un Token guardado en el archivo .env. Usando token automáticamente...")
+        print("[+] A saved Token was detected in the .env file. Using token automatically...")
         if env_token.startswith("Bearer "):
             env_token = env_token.replace("Bearer ", "").strip()
             
@@ -249,16 +249,16 @@ def autenticacao(**kwargs):
         params = {'token': env_token}
         return authMart, params
 
-    print("=== MÉTODOS DE AUTENTICACIÓN HOTMART ===")
-    print("1. Enviar Código/Token OTP a mi correo electrónico (Recomendado)")
-    print("2. Pegar Bearer Token directamente desde el navegador (F12)")
-    print("3. Credenciales Usuario/Contraseña (Sparkle Legacy API)")
-    metodo = input("Selecciona método (1, 2 o 3, por defecto 1): ").strip() or "1"
+    print("=== HOTMART AUTHENTICATION METHODS ===")
+    print("1. Send OTP Code/Token to my email address (Recommended)")
+    print("2. Paste Bearer Token directly from the browser (F12)")
+    print("3. User Credentials / Password (Sparkle Legacy API)")
+    metodo = input("Select auth method (1, 2 or 3, default 1): ").strip() or "1"
     
     if metodo == "1":
         email = kwargs.get("email") or env_email
         if not email:
-            email = input("Ingresa tu correo electrónico registrado en Hotmart:\n").strip()
+            email = input("Enter your registered Hotmart email:\n").strip()
             
         loga(".", "INFO", f"Solicitando envío de código OTP a {email}")
         print(f"\n[+] Solicitando envío de código de verificación a: {email} ...")
@@ -283,8 +283,8 @@ def autenticacao(**kwargs):
         except Exception as e:
             print(f"[AVISO] No se pudo solicitar automáticamente el código: {e}")
 
-        print("\nRevisa tu bandeja de entrada o spam en Hotmart.")
-        token_input = input("Ingresa el código OTP (o el Bearer Token) recibido: ").strip()
+        print("\nCheck your inbox or spam in Hotmart.")
+        token_input = input("Enter the received OTP code (or Bearer Token): ").strip()
         
         if token_input.startswith("Bearer "):
             token_input = token_input.replace("Bearer ", "").strip()
@@ -294,13 +294,13 @@ def autenticacao(**kwargs):
         return authMart, params
 
     elif metodo == "2":
-        print("\n¿Cómo obtener tu Token desde el navegador?")
-        print("1. Inicia sesión en tu curso en Hotmart desde Chrome/Firefox.")
-        print("2. Presiona F12 -> pestaña 'Red' (Network).")
-        print("3. Recarga la página o haz clic en una clase.")
-        print("4. Busca cualquier petición a 'api-club.hotmart.com'.")
-        print("5. Copia el valor del encabezado 'authorization' (Bearer eyJ...) o de 'token'.\n")
-        token = input("Pega tu Token aquí: ").strip()
+        print("\nHow to get your Token from the browser?")
+        print("1. Log in to your Hotmart course in Chrome/Firefox.")
+        print("2. Press F12 -> 'Network' tab.")
+        print("3. Reload the page or click on any class.")
+        print("4. Search for any request to 'api-club.hotmart.com'.")
+        print("5. Copy the value of the 'authorization' header (Bearer eyJ...) or the 'token'.\n")
+        token = input("Paste your Token here: ").strip()
         if token.startswith("Bearer "):
             token = token.replace("Bearer ", "").strip()
         
@@ -311,10 +311,10 @@ def autenticacao(**kwargs):
     # Flujo Legacy (Opción 3)
     email = kwargs.get("email") or env_email
     if not email:
-        email = str(input("¿Cuál es el correo de inicio de sesión?\n"))
+        email = str(input("What is your login email?\n"))
     senha = kwargs.get("senha", None)
     if senha is None:
-        senha = str(input("¿Cuál es la contraseña de inicio de sesión?\n"))
+        senha = str(input("What is your login password?\n"))
         
     data = {'username': email, 'password': senha, 'grant_type': 'password'}
     loga(".", "INFO", f"Intentando autenticar en Hotmart con el payload {str(data)}")
@@ -336,7 +336,7 @@ def autenticacao(**kwargs):
     try:
         params = {'token': authSparkle_json['access_token']}
     except KeyError:
-        print("\nCorreo o contraseña inválidos o fallo de la API de Sparkle. Saliendo...")
+        print("\nInvalid email or password, or Sparkle API failure. Exiting...")
         loga(".", "ERROR", "¡Token no encontrado! Es posible que la contraseña o usuario sean incorrectos o la API haya cambiado.")
         loga(".", "ERROR", f"{authSparkle.text}")
         exit(13)
@@ -368,7 +368,7 @@ def listacursos(authMart, params):
     # Si la API no devolvió productos (cambio de API Hotmart 2026), intenta cargar desde config_cursos.py
     if not produtos:
         loga(".", "WARN", "No se encontraron productos en check_token")
-        print("\nAVISO: La API de Hotmart no devolvió cursos automáticamente.")
+        print("\nWARNING: Hotmart API did not return courses automatically.")
         
         # Intenta importar desde el archivo de configuración manual
         try:
@@ -393,28 +393,28 @@ def listacursos(authMart, params):
                     })
                 loga(".", "INFO", f"Se cargaron {len(CURSOS_SUBDOMINIOS)} cursos desde el archivo de configuración")
             else:
-                print("\nAVISO: El archivo config_cursos.py está vacío.")
+                print("\nWARNING: config_cursos.py file is empty.")
         except ImportError:
-            print("\nAVISO: Archivo config_cursos.py no encontrado.")
+            print("\nWARNING: config_cursos.py file not found.")
         except Exception as e:
             loga(".", "ERROR", f"Error al cargar config_cursos.py: {e}")
             print(f"\nAVISO: Error al cargar la configuración: {e}")
         
         # Si aún no hay cursos, permite al usuario ingresarlos de forma interactiva
         if not produtos:
-            print("\nPara encontrar el subdominio de tu curso:")
-            print("1. Accede a https://sun.hotmart.com/minhas-compras")
-            print("2. Haz clic en 'Acceder' en el curso deseado")
-            print("3. En la URL verás: https://hotmart.com/pt-br/club/SUBDOMINIO/...")
-            print("4. El 'SUBDOMINIO' es lo que debes ingresar")
-            print("\nConsejo: Edita el archivo 'config_cursos.py' para guardar los subdominios permanentemente\n")
+            print("\nTo find your course subdomain:")
+            print("1. Go to https://sun.hotmart.com/minhas-compras")
+            print("2. Click on 'Access' in the desired course")
+            print("3. Inside the URL you will see: https://hotmart.com/en/club/SUBDOMAIN/...")
+            print("4. The 'SUBDOMAIN' is the part to copy")
+            print("\nTip: Edit 'config_cursos.py' to save subdomains permanently\n")
             
             subdominios_manuais = []
             while True:
-                subdomain = input("Ingresa el subdominio del curso (o presiona Enter para finalizar): ").strip()
+                subdomain = input("Enter the course subdomain (or press Enter to finish): ").strip()
                 if not subdomain:
                     if not subdominios_manuais:
-                        print("AVISO: No se agregó ningún curso. Finalizando...")
+                        print("WARNING: No course was added. Exiting...")
                         exit(0)
                     break
                 subdominios_manuais.append(subdomain)
@@ -474,20 +474,144 @@ def listacursos(authMart, params):
             continue
     
     if not cursosValidos:
-        print("\n[ERROR] No se pudo conectar o validar la membresía para los subdominios ingresados.")
-        print("Revisa tu Token o estado del curso.")
+        print("\n[ERROR] Could not connect or validate membership for the provided subdomains.")
+        print("Please check your Token or course membership status.")
         exit(1)
 
-    print(f"\n=== Cursos disponibles ({len(cursosValidos)} encontrado(s)) ===")
-    for i, curso in enumerate(cursosValidos, start=1):
-        print(f"{i}. {curso['nome']} (subdominio: {curso['resource']['subdomain']})")
-    
-    entrada_usuario = input('¿Qué curso deseas descargar? (Ingresa el número): ').strip()
-    if entrada_usuario.isdigit():
-        opcao = int(entrada_usuario) - 1
-    else:
-        opcao = 0
+    def select_item_cli(options, title="Select an option:", show_exit=True):
+        """
+        Interactively select an option using keyboard arrow keys or shortcuts.
+        Displays dynamic pagination and shortcut indicators on top of the screen.
+        """
+        import msvcrt
+        import sys
         
+        display_options = list(options)
+        if show_exit:
+            display_options.append("Exit / Cancel")
+            
+        options_count = len(display_options)
+        
+        # Ask the user if they want to digit index manually or scroll
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print(f"=== {title} ===")
+        print("Choose selection method:")
+        print("1. Scroll/Navigate with keyboard arrows")
+        print("2. Type/Digit the index number directly")
+        choice = ""
+        while choice not in ["1", "2"]:
+            # Capture keyboard key directly
+            k = msvcrt.getch()
+            if k == b'1':
+                choice = "1"
+            elif k == b'2':
+                choice = "2"
+            elif k == b'\x1b': # ESC
+                print("\nExiting program...")
+                exit(0)
+                
+        if choice == "2":
+            # Digit mode
+            while True:
+                os.system('cls' if os.name == 'nt' else 'clear')
+                print(f"=== {title} ===")
+                for idx, opt in enumerate(display_options, start=1):
+                    print(f"{idx:3d}. {opt}")
+                print(f"\nEnter the number (1 to {options_count}) or type 'exit' to quit:")
+                typed = input("> ").strip()
+                if typed.lower() == 'exit':
+                    print("\nExiting program...")
+                    exit(0)
+                try:
+                    num = int(typed) - 1
+                    if 0 <= num < options_count:
+                        if show_exit and num == options_count - 1:
+                            print("\nExiting program...")
+                            exit(0)
+                        return num
+                except ValueError:
+                    pass
+                print("Invalid index. Press any key to retry...")
+                msvcrt.getch()
+                
+        # Scroll Mode
+        selected = 0
+        while True:
+            os.system('cls' if os.name == 'nt' else 'clear')
+            # Shortcut headers printed on top of the screen
+            print("=====================================================================")
+            print(" [ESC] Exit  |  [F] Find/Type index directly  |  [C] Display all content ")
+            print("=====================================================================")
+            print(f"\n=== {title} ===")
+            print("(Use UP/DOWN arrows to navigate, SPACE or ENTER to select.)\n")
+            
+            start_idx = max(0, selected - 5)
+            end_idx = min(options_count, selected + 6)
+            
+            if selected - 5 < 0:
+                end_idx = min(options_count, 11)
+            if selected + 6 > options_count:
+                start_idx = max(0, options_count - 11)
+            
+            if start_idx > 0:
+                print("   ... (more options above) ...")
+                
+            for i in range(start_idx, end_idx):
+                opt = display_options[i]
+                if i == selected:
+                    print(f" > [x] {i + 1:3d}. {opt}")
+                else:
+                    print(f"   [ ] {i + 1:3d}. {opt}")
+                    
+            if end_idx < options_count:
+                print("   ... (more options below) ...")
+            
+            key = msvcrt.getch()
+            
+            # Key Bindings & Shortcuts
+            if key == b'\x1b': # ESC
+                print("\nExiting program...")
+                exit(0)
+            elif key == b'\x03': # Ctrl+C
+                print("\nOperation cancelled.")
+                exit(0)
+            elif key == b'f' or key == b'F': # F shortcut - switch to typing mode
+                while True:
+                    print(f"\nEnter the number (1 to {options_count}) to select: ")
+                    typed = input("> ").strip()
+                    try:
+                        num = int(typed) - 1
+                        if 0 <= num < options_count:
+                            if show_exit and num == options_count - 1:
+                                print("\nExiting program...")
+                                exit(0)
+                            return num
+                    except ValueError:
+                        pass
+                    print("Invalid index. Try again.")
+            elif key == b'c' or key == b'C': # C shortcut - display all content (no truncation)
+                os.system('cls' if os.name == 'nt' else 'clear')
+                print(f"=== {title} (Full List) ===")
+                for idx, opt in enumerate(display_options, start=1):
+                    print(f"{idx:3d}. {opt}")
+                print("\nPress any key to return to navigation...")
+                msvcrt.getch()
+            elif key == b'\r' or key == b' ': # Enter or Space
+                if show_exit and selected == options_count - 1:
+                    print("\nExiting program...")
+                    exit(0)
+                return selected
+            elif key == b'\xe0': # Special key (arrows)
+                arrow = msvcrt.getch()
+                if arrow == b'H': # UP arrow
+                    selected = (selected - 1) % options_count
+                elif arrow == b'P': # DOWN arrow
+                    selected = (selected + 1) % options_count
+
+    # Selección de curso con bucle de validación y soporte de exit
+    cursor_opts = [f"{c['nome']} (subdomain: {c['resource']['subdomain']})" for c in cursosValidos]
+    opcao = select_item_cli(cursor_opts, title=f"Cursos disponibles ({len(cursosValidos)} encontrado(s))")
+    
     nmcurso = slugify(cursosValidos[opcao]['nome'])
 
     loga(".", "INFO", f"Iniciando descarga del curso {nmcurso}")
@@ -596,20 +720,21 @@ def listacursos(authMart, params):
     with open(first_folder + '/debug.txt', 'a', encoding='utf-8') as debug_file:
         debug_file.write(str(curso['modules']) + '\n\n\n' + str(estrutura))
 
-    loga(first_folder, "INFO", "Diccionario creado con éxito, exportado como debug.txt")
-    loga(first_folder, "INFO", f"Total de clases en el curso {nmcurso}: {str(x)}")
+    loga(first_folder, "INFO", "Dictionary created successfully, exported as debug.txt")
+    loga(first_folder, "INFO", f"Total classes in the course {nmcurso}: {str(x)}")
 
-    # Opciones de descarga: ¿Todo el curso o una clase específica?
-    print("\n==========================================")
-    print("=== MODO DE DESCARGA ===")
-    print("1. Descargar SOLO 1 clase/video específico (Paso a paso)")
-    print("2. Descargar TODO el curso completo")
-    print("3. Descargar un RANGO de clases (Desde X hasta Y)")
-    modo_descarga = input("Selecciona opción (1, 2 o 3, por defecto 1): ").strip() or "1"
+    # Download options: Whole course, single class or custom range
+    download_modes = [
+        "Download ONLY 1 specific class/video (Step-by-step)",
+        "Download the ENTIRE course",
+        "Download a RANGE of classes (From X to Y)"
+    ]
+    selected_mode_idx = select_item_cli(download_modes, title="DOWNLOAD MODE")
+    modo_descarga = str(selected_mode_idx + 1)
     
-    clases_a_descargar = [] # Lista de hashes de clases seleccionadas para descargar
+    clases_a_descargar = [] # List of selected class hashes to download
     
-    # Construir listado lineal indexado de todas las clases
+    # Build index list of all classes
     todas_las_clases = []
     for modulo in estrutura:
         for nome_mod in estrutura[modulo]:
@@ -617,26 +742,35 @@ def listacursos(authMart, params):
                 todas_las_clases.append((modulo, nome_mod, aula_item))
                 
     if modo_descarga == "1":
-        print("\n--- Lista de clases disponibles ---")
-        for idx, (modulo, nome_mod, aula_item) in enumerate(todas_las_clases, start=1):
-            print(f"{idx}. [{nome_mod}] {aula_item[1]}")
-        
-        idx_clase = int(input("\n¿Qué clase deseas descargar? (Ingresa el número): ")) - 1
+        class_options = [f"[{nome_mod}] {aula_item[1]}" for (modulo, nome_mod, aula_item) in todas_las_clases]
+        idx_clase = select_item_cli(class_options, title="Available classes list")
         _, _, aula_sel = todas_las_clases[idx_clase]
         clases_a_descargar.append(aula_sel[2])
-        print(f"\n[+] Iniciando descarga de la clase: '{aula_sel[1]}'\n")
+        print(f"\n[+] Starting download for class: '{aula_sel[1]}'\n")
         
     elif modo_descarga == "3":
-        print("\n--- Lista de clases disponibles ---")
-        for idx, (modulo, nome_mod, aula_item) in enumerate(todas_las_clases, start=1):
-            print(f"{idx}. [{nome_mod}] {aula_item[1]}")
-            
-        desde = int(input(f"\n¿Desde qué número de clase empezar? (1 a {len(todas_las_clases)}): ")) - 1
-        hasta = int(input(f"¿Hasta qué número de clase descargar? ({desde + 1} a {len(todas_las_clases)}): ")) - 1
-        
-        # Validar límites
-        desde = max(0, min(desde, len(todas_las_clases) - 1))
-        hasta = max(desde, min(hasta, len(todas_las_clases) - 1))
+        while True:
+            # Range validation loop
+            try:
+                print(f"\nTotal classes in the course: {len(todas_las_clases)}")
+                desde_input = input(f"Start downloading from class number? (1 to {len(todas_las_clases)}, or type 'exit' to quit): ").strip()
+                if desde_input.lower() == 'exit':
+                    print("\nExiting program...")
+                    exit(0)
+                desde = int(desde_input) - 1
+                
+                hasta_input = input(f"Download up to class number? ({desde + 1} to {len(todas_las_clases)}, or type 'exit' to quit): ").strip()
+                if hasta_input.lower() == 'exit':
+                    print("\nExiting program...")
+                    exit(0)
+                hasta = int(hasta_input) - 1
+                
+                if 0 <= desde < len(todas_las_clases) and desde <= hasta < len(todas_las_clases):
+                    break
+                else:
+                    print(f"\n[!] Option not available. Please enter a valid class range.")
+            except ValueError:
+                print(f"\n[!] Option not available. Please enter valid integers.")
         
         print(f"\n[+] Seleccionado rango de clases del {desde + 1} al {hasta + 1}:")
         for i in range(desde, hasta + 1):
@@ -645,7 +779,7 @@ def listacursos(authMart, params):
             print(f"  - {i + 1}. {aula_sel[1]}")
         print()
 
-    # Recorre cada módulo y clase para descargar sus componentes
+    # Iterate modules and classes to process downloads
     for modulo in estrutura:
         for aulas in estrutura[modulo]:
             # Filtrar si el usuario eligió modo selectivo (1 o 3)
@@ -730,7 +864,7 @@ def listacursos(authMart, params):
 
                 if not aula[3]['videos']:
                     loga(first_folder, "WARN",
-                         "La clase no contiene videos de Hotmart en el reproductor nativo, buscando reproductores externos (Vimeo/YouTube)...")
+                         "Class does not contain native Hotmart videos, checking external hosts (Vimeo/YouTube)...")
 
                     try:
                         pjson = BeautifulSoup(desct, features="html.parser")
@@ -774,14 +908,14 @@ def listacursos(authMart, params):
                                 ydl_opts = {"format": "best", 'outtmpl': folder_path_class_video}
                                 with youtube_dl.YoutubeDL(ydl_opts) as ydl:
                                     ydl.download([linkV])
-                                    loga(first_folder, "INFO", "Vídeo externo descargado con éxito.")
+                                    loga(first_folder, "INFO", "External video downloaded successfully.")
                             else:
-                                print("Clase ya presente, omitiendo...")
+                                print("Class already exists, skipping...")
                                 loga(first_folder, "INFO", "Clase ya presente. Omitida.")
 
                     except:
                         loga(first_folder, "WARN",
-                             "La plataforma no devolvió videos, verificar si es una publicación únicamente textual.")
+                             "No videos found on the platform, checking if it is a text-only class.")
                         pass
 
                 else:  # Reproductor nativo de Hotmart (HLS m3u8)
@@ -1128,9 +1262,9 @@ def listacursos(authMart, params):
                                     except Exception:
                                         pass
 
-                            loga(first_folder, "INFO", "Carpeta temporal limpiada")
+                            loga(first_folder, "INFO", "Temporary folder cleared")
                         else:
-                            print("Clase ya presente, omitiendo...")
+                            print("Class already exists, skipping...")
                             loga(first_folder, "INFO", "Clase ya presente, omitida")
 
                 # 3. Descarga de archivos adjuntos nativos de la clase (PDFs, ZIPs, etc.)
@@ -1326,11 +1460,11 @@ def listacursos(authMart, params):
                     with open(folder_path_class_links, "a", encoding="utf-8") as linkz:
                         for i in aula[5]['links']:
                             linkz.write(f"{i[0]}: {i[1]}\n")
-                    loga(first_folder, "INFO", "Enlaces guardados con éxito")
+                    loga(first_folder, "INFO", "Links saved successfully")
 
 
 login = {
-    "Info": "Puedes definir tu correo y contraseña aquí si no deseas introducirlos por consola cada vez.",
+    "Info": "You can define your email and password here if you do not want to enter them in the console each time.",
     "autor": "Telegram: @katomaro"
 }
 
