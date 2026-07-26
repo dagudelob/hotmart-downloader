@@ -313,11 +313,13 @@ async def api_login(req: LoginRequest):
         # Map structure
         course_structure = {}
         modules = curso.get('modules') or curso.get('data') or []
-        for mod in modules:
+        for idx_mod, mod in enumerate(modules, start=1):
             mod_name = mod.get('name')
-            mod_order = mod.get('moduleOrder') or mod.get('order') or 1
-            if mod_name not in course_structure:
-                course_structure[mod_order] = {mod_name: []}
+            mod_order = mod.get('moduleOrder') or mod.get('order') or idx_mod
+            if mod_order not in course_structure:
+                course_structure[mod_order] = {}
+            if mod_name not in course_structure[mod_order]:
+                course_structure[mod_order][mod_name] = []
                 
             pages = mod.get('pages') or mod.get('lessons') or []
             for page in pages:
