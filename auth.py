@@ -3,7 +3,95 @@ import glob
 import requests
 import json
 import base64
+import http.server
+import threading
+import sys
+import time
+import select
 from logger import loga, print_color
+
+received_token = [None]
+
+class TokenReceiver(http.server.BaseHTTPRequestHandler):
+    def log_message(self, format, *args):
+        pass  # Suppress HTTP server output logs in CLI
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        self.end_headers()
+
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.end_headers()
+        html = """
+        <html>
+        <head><title>Hotmart Token Receiver</title></head>
+        <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px; background-color: #f9f9f9;">
+            <h1 style="color: #4CAF50;">Server is Ready!</h1>
+            <p>This local server is waiting to receive your token automatically.</p>
+            <p>Please paste the JavaScript snippet in your Hotmart course browser tab console (F12) to submit the token.</p>
+        </body>
+        </html>
+        """
+        self.wfile.write(html.encode("utf-8"))
+
+    def do_POST(self):
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        try:
+            content_length = int(self.headers['Content-Length'])
+            body = self.rfile.read(content_length)
+            data = json.loads(body)
+            token = data.get("token")
+            if token:
+                received_token[0] = token
+                self.wfile.write(json.dumps({"status": "ok"}).encode("utf-8"))
+            else:
+                self.wfile.write(json.dumps({"status": "error", "message": "No token provided"}).encode("utf-8"))
+        except Exception as e:
+            self.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode("utf-8"))
+
+def update_env_token(token):
+    lines = []
+    token_written = False
+    env_file = ".env"
+    if os.path.exists(env_file):
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip().startswith("TOKEN="):
+                    lines.append(f'TOKEN="{token}"\n')
+                    token_written = True
+                else:
+                    lines.append(line)
+    if not token_written:
+        lines.append(f'TOKEN="{token}"\n')
+        
+    with open(env_file, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+
+def update_env_download_dir(dir_path):
+    lines = []
+    dir_written = False
+    env_file = ".env"
+    if os.path.exists(env_file):
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip().startswith("DOWNLOAD_DIR="):
+                    lines.append(f'DOWNLOAD_DIR="{dir_path}"\n')
+                    dir_written = True
+                else:
+                    lines.append(line)
+    if not dir_written:
+        lines.append(f'DOWNLOAD_DIR="{dir_path}"\n')
+        
+    with open(env_file, "w", encoding="utf-8") as f:
+        f.writelines(lines)
 
 def autenticacao(**kwargs):
     """
@@ -87,98 +175,35 @@ def autenticacao(**kwargs):
         params = {'token': env_token}
         return authMart, params
 
-    print("=== HOTMART AUTHENTICATION METHODS ===")
-    print("1. Send OTP Code/Token to my email address (Recommended)")
-    print("2. Paste Bearer Token directly from the browser (F12)")
-    print("3. User Credentials / Password (Sparkle Legacy API)")
-    metodo = input("Select auth method (1, 2 or 3, default 1): ").strip() or "1"
+    print("\n=== HOTMART AUTHENTICATION ===")
+    print("To download courses, a Hotmart Bearer Token is required.")
+    print("How to get your Token from your browser:")
+    print("1. Log in to your Hotmart course in Chrome/Firefox.")
+    print("2. Open Developer Tools by pressing F12 -> 'Console' tab.")
+    print("3. Paste the contents of 'Get_Token.js' and press Enter (it will copy the token to your clipboard).")
+    print("   OR open F12 -> 'Network' tab, look for requests to 'api-club.hotmart.com', and copy the authorization header.")
+    print("--------------------------------------------------------------------------------")
     
-    if metodo == "1":
-        email = kwargs.get("email") or env_email
-        if not email:
-            email = input("Enter your registered Hotmart email:\n").strip()
+    while True:
+        token = input("Paste your Bearer Token here (or type 'exit' to quit): ").strip()
+        if token.lower() == 'exit':
+            print("Exiting...")
+            exit(0)
             
-        loga(".", "INFO", f"Requesting OTP code to {email}")
-        print_color(f"[INFO] Requesting verification code to: {email} ...")
-        
-        try:
-            resp = authMart.post(
-                "https://sso.hotmart.com/api/v1/login/email",
-                json={"email": email},
-                headers={
-                    "content-type": "application/json",
-                    "origin": "https://sso.hotmart.com",
-                    "referer": "https://sso.hotmart.com/login?passwordless=true"
-                },
-                timeout=15
-            )
-            if resp.status_code in [200, 201, 204]:
-                print_color(f"[INFO] Verification code successfully sent to {email}!")
-            else:
-                print_color(f"[WARNING] HTTP Status {resp.status_code}: {resp.text[:200]}")
-        except Exception as e:
-            print_color(f"[WARNING] Could not automatically request verification code: {e}")
-
-        print("\nCheck your inbox or spam in Hotmart.")
-        token_input = input("Enter the received OTP code (or Bearer Token): ").strip()
-        
-        if token_input.startswith("Bearer "):
-            token_input = token_input.replace("Bearer ", "").strip()
+        if not token:
+            print_color("[WARNING] No token entered. Please enter a valid Bearer Token.")
+            continue
             
-        authMart.headers['authorization'] = f'Bearer {token_input}'
-        params = {'token': token_input}
-        return authMart, params
-
-    elif metodo == "2":
-        print("\nHow to get your Token from the browser?")
-        print("1. Log in to your Hotmart course in Chrome/Firefox.")
-        print("2. Press F12 -> 'Network' tab.")
-        print("3. Reload the page or click on any class.")
-        print("4. Search for any request to 'api-club.hotmart.com'.")
-        print("5. Copy the value of the 'authorization' header (Bearer eyJ...) or the 'token'.\n")
-        token = input("Paste your Token here: ").strip()
         if token.startswith("Bearer "):
             token = token.replace("Bearer ", "").strip()
-        
+            
+        # Save token in .env safely
+        try:
+            update_env_token(token)
+            print_color("[SUCCESS] Token saved successfully in the .env file.")
+        except Exception as e:
+            print_color(f"[WARNING] Failed to save token in .env: {e}")
+            
         authMart.headers['authorization'] = f'Bearer {token}'
         params = {'token': token}
         return authMart, params
-
-    # Legacy Authorization (Option 3)
-    email = kwargs.get("email") or env_email
-    if not email:
-        email = str(input("What is your login email?\n"))
-    senha = kwargs.get("senha", None) or env_password
-    if senha is None:
-        senha = str(input("What is your login password?\n"))
-        
-    data = {'username': email, 'password': senha, 'grant_type': 'password'}
-    loga(".", "INFO", f"Attempting authorization to Sparkle with payload: {str(data)}")
-
-    authSparkle = authMart.post('https://api.sparkleapp.com.br/oauth/token', data=data)
-    if authSparkle.status_code == 200:
-        loga(".", "INFO", "Authentication successful!")
-        authSparkle_json = authSparkle.json()
-    else:
-        print_color(f"[ERROR] Error authenticating against Hotmart (HTTP {authSparkle.status_code}):")
-        print_color(f"[ERROR] API Response: {authSparkle.text[:300]}")
-        loga(".", "ERROR", f"Authentication failed. HTTP status: {authSparkle.status_code}")
-        loga(".", "ERROR", f"{authSparkle.text}")
-        try:
-            authSparkle_json = authSparkle.json()
-        except Exception:
-            authSparkle_json = {}
-
-    try:
-        params = {'token': authSparkle_json['access_token']}
-    except KeyError:
-        print_color("[ERROR] Invalid email or password, or Sparkle API failure. Exiting...")
-        loga(".", "ERROR", "Token not found. Access credentials may be invalid or API has changed.")
-        loga(".", "ERROR", f"{authSparkle.text}")
-        exit(13)
-        
-    authMart.headers.clear()
-    authMart.headers[
-        'user-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    authMart.headers['authorization'] = 'Bearer ' + str(authSparkle_json['access_token'])
-    return authMart, params

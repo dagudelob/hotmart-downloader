@@ -1,5 +1,60 @@
 import os
-import msvcrt
+import sys
+
+try:
+    import msvcrt
+    def getch():
+        return msvcrt.getch()
+except ImportError:
+    import select
+    import termios
+    import tty
+    
+    _getch_buffer = []
+    
+    def getch():
+        global _getch_buffer
+        if _getch_buffer:
+            return _getch_buffer.pop(0)
+        
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            # Read up to 10 bytes from stdin
+            data = os.read(fd, 10)
+            if not data:
+                return b''
+            
+            if data.startswith(b'\x1b') and len(data) > 1:
+                seq = data[1:]
+                if seq in (b'[A', b'OA'):  # UP arrow
+                    _getch_buffer.append(b'H')
+                    return b'\xe0'
+                elif seq in (b'[B', b'OB'):  # DOWN arrow
+                    _getch_buffer.append(b'P')
+                    return b'\xe0'
+                elif seq in (b'[D', b'OD'):  # LEFT arrow
+                    _getch_buffer.append(b'K')
+                    return b'\xe0'
+                elif seq in (b'[C', b'OC'):  # RIGHT arrow
+                    _getch_buffer.append(b'M')
+                    return b'\xe0'
+                
+                # Buffer any leftover bytes from other escape sequences
+                for b in seq:
+                    _getch_buffer.append(bytes([b]))
+                return b'\x1b'
+            
+            ch = data[0]
+            if ch == 0x7f:  # Backspace on Unix
+                return b'\x08'
+            elif ch == 0x0a or ch == 0x0d:
+                return b'\r'
+            return bytes([ch])
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
 
 def select_item_cli(options, title="Select an option:", show_exit=True):
     """
@@ -49,7 +104,7 @@ def select_item_cli(options, title="Select an option:", show_exit=True):
         if not display_all and end_idx < options_count:
             print("   ... (more options below) ...")
         
-        key = msvcrt.getch()
+        key = getch()
         
         # Key Bindings & Shortcuts
         if key == b'\x1b': # ESC
@@ -66,7 +121,7 @@ def select_item_cli(options, title="Select an option:", show_exit=True):
                 exit(0)
             return selected
         elif key == b'\xe0': # Special key (arrows)
-            arrow = msvcrt.getch()
+            arrow = getch()
             if arrow == b'H': # UP arrow
                 selected = (selected - 1) % options_count
             elif arrow == b'P': # DOWN arrow
@@ -94,7 +149,7 @@ def input_number_cli(prompt, min_val, max_val, title="Enter Range", options=None
         print(prompt)
         print(f"> {typed}", end="", flush=True)
         
-        key = msvcrt.getch()
+        key = getch()
         if key == b'\x1b':  # ESC
             print("\nExiting program...")
             exit(0)
@@ -120,7 +175,7 @@ def input_number_cli(prompt, min_val, max_val, title="Enter Range", options=None
         elif key == b'\x08':  # Backspace
             typed = typed[:-1]
         elif key == b'\xe0':  # Special key
-            arrow = msvcrt.getch()
+            arrow = getch()
             if arrow == b'K':  # LEFT arrow
                 return -2
         else:

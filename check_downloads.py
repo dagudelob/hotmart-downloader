@@ -1,9 +1,19 @@
 import os
 import glob
-from utils import slugify
+from dotenv import load_dotenv
 
-def check_missing_downloads(course_subdomain="universo-hot-jamin"):
-    target_dir = course_subdomain
+load_dotenv()
+
+def check_missing_downloads(course_subdomain=None):
+    if not course_subdomain or course_subdomain == "your-course-subdomain":
+        course_subdomain = os.getenv("SUBDOMAIN", "your-course-subdomain").strip()
+        
+    download_dir = os.getenv("DOWNLOAD_DIR", "").strip()
+    if download_dir:
+        target_dir = os.path.join(download_dir, course_subdomain)
+    else:
+        target_dir = course_subdomain
+
     if not os.path.exists(target_dir):
         print(f"Error: La carpeta de descargas '{target_dir}' no existe.")
         return
@@ -17,10 +27,10 @@ def check_missing_downloads(course_subdomain="universo-hot-jamin"):
     ok_videos = 0
 
     # Walk through modules
-    modules = [d for d in os.listdir(target_dir) if os.path.isdir(os.path.join(target_dir, d))]
+    modules = sorted([d for d in os.listdir(target_dir) if os.path.isdir(os.path.join(target_dir, d))])
     for mod in modules:
         mod_path = os.path.join(target_dir, mod)
-        classes = [c for c in os.listdir(mod_path) if os.path.isdir(os.path.join(mod_path, c))]
+        classes = sorted([c for c in os.listdir(mod_path) if os.path.isdir(os.path.join(mod_path, c))])
         
         for cl in classes:
             total_folders += 1

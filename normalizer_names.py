@@ -1,8 +1,13 @@
 import os
 import glob
 from utils import slugify
+from dotenv import load_dotenv
 
-def rename_to_descriptive_format(course_subdomain="universo-hot-jamin"):
+load_dotenv()
+
+def rename_to_descriptive_format(course_subdomain=None):
+    if not course_subdomain or course_subdomain == "your-course-subdomain":
+        course_subdomain = os.getenv("SUBDOMAIN", "your-course-subdomain").strip()
     target_dir = course_subdomain
     if not os.path.exists(target_dir):
         print(f"Error: La carpeta de descargas '{target_dir}' no existe.")

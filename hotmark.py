@@ -15,6 +15,9 @@ import m3u8  # pip install m3u8
 import re
 import os
 import json
+from dotenv import load_dotenv
+
+load_dotenv()
 from urllib.parse import urljoin, urlparse, parse_qs
 from bs4 import BeautifulSoup  # pip install beautifulsoup4
 import subprocess
@@ -24,7 +27,7 @@ import glob
 from utils import slugify
 from logger import loga, debug, http_log, set_debug_log, print_color
 from cli import select_item_cli, input_number_cli
-from auth import autenticacao
+from auth import autenticacao, update_env_download_dir
 from gdrive import extrair_google_drive_urls, baixar_google_drive
 
 
@@ -34,16 +37,20 @@ def fetch_course_navigation(authMart, dominio, nav_headers):
     Supports gateway fallback routing.
     Raises RuntimeError on failure instead of calling exit() so web server stays alive.
     """
-    # Pre-load x-product-id from config_cursos.py if available (avoids extra API round-trips)
+    # Pre-load x-product-id from .env or config_cursos.py if available (avoids extra API round-trips)
     if 'x-product-id' not in nav_headers:
-        try:
-            from config_cursos import CURSOS_SUBDOMINIOS
-            for item in CURSOS_SUBDOMINIOS:
-                if item.get("subdomain") == dominio and item.get("productId"):
-                    nav_headers['x-product-id'] = str(item["productId"])
-                    break
-        except Exception:
-            pass
+        env_pid = (os.getenv("PRODUCT_ID") or os.getenv("PRODUCTID") or "").strip()
+        if env_pid:
+            nav_headers['x-product-id'] = env_pid
+        else:
+            try:
+                from config_cursos import CURSOS_SUBDOMINIOS
+                for item in CURSOS_SUBDOMINIOS:
+                    if item.get("subdomain") == dominio and item.get("productId"):
+                        nav_headers['x-product-id'] = str(item["productId"])
+                        break
+            except Exception:
+                pass
 
     # First attempt: legacy API (no subdomain needed)
     resp_nav = authMart.get(
@@ -61,22 +68,33 @@ def fetch_course_navigation(authMart, dominio, nav_headers):
 
     # Fallback: fetch productId dynamically if still getting 400 x-product-id error
     if resp_nav.status_code == 400 and 'x-product-id' in resp_nav.text:
-        for status_url in [
+        status_urls = [
+            'https://api-club-course-consumption-gateway-ga.cb.hotmart.com/v1/memberships',
+            'https://api-club.hotmart.com/hot-club-api/rest/v3/membership',
             f'https://api-club-course-consumption-gateway-ga.cb.hotmart.com/v1/user/{dominio}/status',
             f'https://api-club.hotmart.com/hot-club-api/rest/v3/membership?subdomain={dominio}',
-        ]:
+        ]
+        for status_url in status_urls:
             try:
-                resp_mem = authMart.get(status_url, headers=nav_headers)
+                resp_mem = authMart.get(status_url, headers=nav_headers, timeout=10)
                 if resp_mem.status_code == 200:
                     data = resp_mem.json()
-                    # Try multiple field names the API might use
-                    p_id = (
-                        data.get('productId') or
-                        data.get('product_id') or
-                        data.get('id') or
-                        data.get('resource', {}).get('productId') or
-                        data.get('resource', {}).get('id')
-                    )
+                    p_id = None
+                    if isinstance(data, list):
+                        items = data
+                    elif isinstance(data, dict):
+                        items = data.get('items') or [data]
+                    else:
+                        items = []
+
+                    for it in items:
+                        resource = it.get('resource', it) if isinstance(it, dict) else {}
+                        sub = resource.get('subdomain') or it.get('subdomain')
+                        if sub == dominio or not sub:
+                            p_id = resource.get('productId') or resource.get('id') or it.get('productId') or it.get('id')
+                            if p_id:
+                                break
+
                     if p_id:
                         nav_headers['x-product-id'] = str(p_id)
                         resp_nav = authMart.get(
@@ -107,9 +125,14 @@ def download_class_video(aula, modulo, folder_path_class, first_folder, authMart
     video_filename = f"{slugify(str(aula[0]))}.{slugify(aula[1])}.mp4"
     folder_path_class_video = f'{folder_path_class}/{video_filename}'
 
-    if os.path.isfile(folder_path_class_video):
-        print_color("[INFO] Class already exists, skipping...")
-        loga(first_folder, "INFO", "Class already exists, skipped")
+    if os.path.isfile(folder_path_class_video) and os.path.getsize(folder_path_class_video) > 0:
+        print_color(f"[INFO] Video downloaded already: {video_filename}, skipping...")
+        loga(first_folder, "INFO", f"Video downloaded already: {video_filename}, skipped")
+        if progress_callback:
+            try:
+                progress_callback(100, 100, 100, "video downloaded already")
+            except Exception:
+                pass
         return
 
     # Case A: External video provider (Vimeo / YouTube)
@@ -698,7 +721,37 @@ def download_class_assets(aula, modulo, folder_path_class, first_folder, authMar
         loga(first_folder, "INFO", "Links saved successfully")
 
 
+def prompt_download_directory():
+    current_dir = os.getenv('DOWNLOAD_DIR', '').strip()
+    print("\n=====================================================================")
+    print(" === DOWNLOAD LOCATION CONFIGURATION ===")
+    print("=====================================================================")
+    if current_dir:
+        print_color(f"[INFO] Currently configured download path: {current_dir}")
+        opc = input("Do you want to change the download destination path? (y/N): ").strip().lower()
+        if opc not in ['y', 'yes', 's', 'si']:
+            return current_dir
+
+    print("\nWhere do you want to save your downloaded course files?")
+    print("1. Root folder of this project (./)")
+    print("2. Custom folder path (e.g. /path/to/downloads or C:\\Downloads)")
+    choice = input("Select an option (1 or 2, default 1): ").strip() or "1"
+
+    if choice == "2":
+        new_path = input("\nEnter the full custom path for downloads:\n> ").strip().strip('"\'')
+        if new_path:
+            update_env_download_dir(new_path)
+            os.environ['DOWNLOAD_DIR'] = new_path
+            print_color(f"[SUCCESS] Download location saved in .env: {new_path}")
+            return new_path
+
+    update_env_download_dir("")
+    os.environ['DOWNLOAD_DIR'] = ""
+    print_color("[INFO] Downloads will be saved in the root folder of this project.")
+    return ""
+
 def listacursos(authMart, params):
+    # (Rest of listacursos body follows)
     """
     Retrieves the list of courses associated with the user's Hotmart account.
     Then navigates the modules, classes, videos, and materials structure to download them.
@@ -778,6 +831,7 @@ def listacursos(authMart, params):
         print_color("\n[ERROR] Could not connect or validate membership for the provided subdomains.")
         exit(1)
 
+    prompt_download_directory()
     wizard_state = 1
     
     while True:
@@ -788,7 +842,12 @@ def listacursos(authMart, params):
                 continue
             
             nmcurso = slugify(cursosValidos[opcao]['nome'])
-            first_folder = f'{nmcurso}'
+            download_dir = os.getenv('DOWNLOAD_DIR', '').strip()
+            if download_dir:
+                first_folder = os.path.join(download_dir, nmcurso)
+            else:
+                first_folder = f'{nmcurso}'
+            
             if not os.path.exists(first_folder):
                 os.makedirs(first_folder)
             

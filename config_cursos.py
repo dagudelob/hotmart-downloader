@@ -10,6 +10,17 @@
 # Example: if the URL is https://hotmart.com/en/club/punchneedlelucrativo/...
 # then the subdomain is: punchneedlelucrativo
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 CURSOS_SUBDOMINIOS = [
-    {"subdomain": "universo-hot-jamin", "productId": "1643794"},
+    # {"subdomain": "example-course-subdomain", "productId": "1234567"},
 ]
+
+env_subdomain = os.getenv("SUBDOMAIN", "").strip()
+env_product_id = (os.getenv("PRODUCT_ID") or os.getenv("PRODUCTID") or "").strip()
+
+if env_subdomain and not any(item.get("subdomain") == env_subdomain for item in CURSOS_SUBDOMINIOS):
+    CURSOS_SUBDOMINIOS.append({"subdomain": env_subdomain, "productId": env_product_id})
