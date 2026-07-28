@@ -5,20 +5,25 @@ from dotenv import load_dotenv
 
 load_dotenv()
 from typing import List, Dict, Any
-from fastapi import FastAPI, Request, BackgroundTasks, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from fastapi import FastAPI, BackgroundTasks, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import requests
 
+from fastapi.middleware.cors import CORSMiddleware
 from auth import autenticacao
 from hotmark import download_class_assets, slugify
 
 app = FastAPI(title="Hotmart Course Downloader Web")
 
-# Templates
-templates = Jinja2Templates(directory="templates")
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Global session and configuration
 auth_session = None
@@ -293,14 +298,16 @@ async def get_subdomains():
         return JSONResponse(status_code=200, content={"subdomains": [], "token_present": False, "error": str(e)})
 
 
-@app.get("/", response_class=HTMLResponse)
-async def get_index(request: Request):
+@app.get("/")
+async def get_index():
     env_token = _read_env_token()
     env_download_dir = os.getenv("DOWNLOAD_DIR", "")
-    return templates.TemplateResponse(request, "index.html", {
-        "env_token": env_token,
+    return {
+        "status": "online",
+        "message": "Hotmart Course Downloader API is running",
+        "env_token_present": bool(env_token),
         "env_download_dir": env_download_dir
-    })
+    }
 
 
 @app.post("/api/auth/login")

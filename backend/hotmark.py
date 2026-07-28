@@ -396,6 +396,7 @@ def download_class_video(aula, modulo, folder_path_class, first_folder, authMart
             else:
                 clean_lines.append(line)
 
+        os.makedirs('temp', exist_ok=True)
         with open('temp/dump.m3u8', 'w', encoding='utf-8') as dump:
             dump.write("\n".join(clean_lines))
 
