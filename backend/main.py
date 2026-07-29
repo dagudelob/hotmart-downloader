@@ -473,16 +473,51 @@ async def api_login(req: LoginRequest):
         if download_dir:
             first_folder = os.path.join(download_dir, first_folder)
         
+        # Cache list of directories in first_folder to make match robust against index shifts
+        existing_mods = {}
+        if os.path.exists(first_folder):
+            for d in os.listdir(first_folder):
+                if os.path.isdir(os.path.join(first_folder, d)):
+                    parts = d.split("_", 1)
+                    if len(parts) > 1:
+                        existing_mods[parts[1]] = d
+                    else:
+                        existing_mods[d] = d
+
         formatted_modules = []
         for mod_order in sorted(course_structure.keys()):
             for mod_name, lessons in course_structure[mod_order].items():
+                mod_slug_base = slugify(mod_name)
+                if mod_slug_base in existing_mods:
+                    actual_mod_dir = existing_mods[mod_slug_base]
+                else:
+                    actual_mod_dir = f"{slugify(str(mod_order))}_{mod_slug_base}"
+                
+                actual_mod_path = os.path.join(first_folder, actual_mod_dir)
+                
+                # Cache class folders inside this module
+                existing_classes = {}
+                if os.path.exists(actual_mod_path):
+                    for c_dir in os.listdir(actual_mod_path):
+                        if os.path.isdir(os.path.join(actual_mod_path, c_dir)):
+                            c_parts = c_dir.split(".", 1)
+                            if len(c_parts) > 1:
+                                existing_classes[c_parts[1]] = c_dir
+                            else:
+                                existing_classes[c_dir] = c_dir
+
                 formatted_lessons = []
                 for lesson in lessons:
                     lesson_order = lesson[0]
                     lesson_name = lesson[1]
-                    mod_slug = f"{slugify(str(mod_order))}_{slugify(mod_name)}"
-                    class_slug = f"{slugify(str(lesson_order))}.{slugify(lesson_name)}"
-                    class_folder = os.path.join(first_folder, mod_slug, class_slug)
+                    
+                    lesson_slug_base = slugify(lesson_name)
+                    if lesson_slug_base in existing_classes:
+                        actual_class_dir = existing_classes[lesson_slug_base]
+                    else:
+                        actual_class_dir = f"{slugify(str(lesson_order))}.{lesson_slug_base}"
+                        
+                    class_folder = os.path.join(actual_mod_path, actual_class_dir)
                     
                     downloaded_status = False
                     has_video = lesson[6].get("has_video_meta", False)
@@ -496,9 +531,9 @@ async def api_login(req: LoginRequest):
                             has_video = True
                         else:
                             candidate_paths = [
-                                f"{first_folder}/{mod_slug}/{class_slug}/{slugify(str(lesson_order))}.{slugify(lesson_name)}.mp4",
-                                f"{first_folder}/{mod_slug}/{class_slug}/{slugify(mod_name)}.{slugify(str(lesson_order))}.mp4",
-                                f"{first_folder}/{mod_slug}/{class_slug}/aula-{slugify(str(lesson_order))}.mp4"
+                                os.path.join(class_folder, f"{slugify(str(lesson_order))}.{lesson_slug_base}.mp4"),
+                                os.path.join(class_folder, f"{slugify(mod_name)}.{slugify(str(lesson_order))}.mp4"),
+                                os.path.join(class_folder, f"aula-{slugify(str(lesson_order))}.mp4")
                             ]
                             if any(os.path.exists(path) and os.path.getsize(path) > 0 for path in candidate_paths):
                                 downloaded_status = True
