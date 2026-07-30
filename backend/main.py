@@ -1,4 +1,5 @@
 import os
+import sys
 import asyncio
 import threading
 from dotenv import load_dotenv
@@ -8,7 +9,10 @@ from typing import List, Dict, Any
 from fastapi import FastAPI, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+import json
+import glob
 import requests
+
 
 from fastapi.middleware.cors import CORSMiddleware
 from auth import autenticacao
@@ -43,26 +47,29 @@ class LoginRequest(BaseModel):
     download_dir: str = ""
 
 def update_env_keys(updates: dict):
-    """Safely updates or adds specified KEY=VALUE pairs in .env without overwriting other keys."""
+    """Safely updates or adds specified KEY=VALUE pairs in .env without duplicating lines."""
     env_file = ".env"
-    lines = []
+    existing_lines = []
     if os.path.exists(env_file):
         try:
             with open(env_file, "r", encoding="utf-8") as f:
-                lines = f.readlines()
+                existing_lines = f.readlines()
         except Exception:
             pass
 
     updated_keys = set()
     new_lines = []
-    for line in lines:
+
+    for line in existing_lines:
         stripped = line.strip()
         if "=" in stripped and not stripped.startswith("#"):
-            k, v = stripped.split("=", 1)
+            k, _ = stripped.split("=", 1)
             k_upper = k.strip().upper()
             if k_upper in updates:
-                new_lines.append(f'{k_upper}="{updates[k_upper]}"\n')
-                updated_keys.add(k_upper)
+                if k_upper not in updated_keys:
+                    new_lines.append(f'{k_upper}="{updates[k_upper]}"\n')
+                    updated_keys.add(k_upper)
+                # Skip extra duplicates of the same key
                 continue
         new_lines.append(line)
 
@@ -75,6 +82,7 @@ def update_env_keys(updates: dict):
             f.writelines(new_lines)
     except Exception:
         pass
+
 
 class DownloadRequest(BaseModel):
     lesson_ids: List[str]
@@ -524,20 +532,35 @@ async def api_login(req: LoginRequest):
                     has_pdf = False
                     has_attached = lesson[6].get("has_attachment_meta", False)
                     
-                    if os.path.exists(class_folder):
-                        mp4s = glob.glob(os.path.join(class_folder, "*.mp4"))
-                        if mp4s and any(os.path.getsize(f) > 0 for f in mp4s):
-                            downloaded_status = True
-                            has_video = True
-                        else:
-                            candidate_paths = [
-                                os.path.join(class_folder, f"{slugify(str(lesson_order))}.{lesson_slug_base}.mp4"),
-                                os.path.join(class_folder, f"{slugify(mod_name)}.{slugify(str(lesson_order))}.mp4"),
-                                os.path.join(class_folder, f"aula-{slugify(str(lesson_order))}.mp4")
-                            ]
-                            if any(os.path.exists(path) and os.path.getsize(path) > 0 for path in candidate_paths):
-                                downloaded_status = True
-                                has_video = True
+                    # Check snapshot if available
+                    snapshot_path = os.path.join(first_folder, "download_snapshot.json")
+                    lesson_id_str = str(lesson[2])
+                    
+                    if os.path.exists(snapshot_path):
+                        try:
+                            with open(snapshot_path, "r", encoding="utf-8") as sf:
+                                snap_data = json.load(sf)
+                                if lesson_id_str in snap_data:
+                                    rel_p = snap_data[lesson_id_str].get("relative_path", "")
+                                    full_p = os.path.join(first_folder, rel_p)
+                                    if os.path.exists(full_p) and os.path.getsize(full_p) > 0:
+                                        downloaded_status = True
+                                        has_video = True
+                        except Exception:
+                            pass
+
+                    if not downloaded_status and os.path.exists(class_folder):
+                        # Recursive check for any mp4 in class_folder or subfolders
+                        for root, _, files in os.walk(class_folder):
+                            for f in files:
+                                if f.endswith(".mp4"):
+                                    f_path = os.path.join(root, f)
+                                    if os.path.getsize(f_path) > 0:
+                                        downloaded_status = True
+                                        has_video = True
+                                        break
+                            if downloaded_status:
+                                break
 
                         materials_folder = os.path.join(class_folder, "Materials")
                         if os.path.exists(materials_folder):
@@ -565,6 +588,38 @@ async def api_login(req: LoginRequest):
         return {"status": "success", "modules": formatted_modules, "subdomain": domain_subdomain}
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
+
+
+@app.post("/api/sync/check")
+async def api_sync_check():
+    import subprocess
+    try:
+        # Run sync_checker.py in backend directory
+        cmd = [sys.executable, "sync_checker.py"]
+        res = subprocess.run(cmd, capture_output=True, text=True, cwd=os.path.dirname(os.path.abspath(__file__)))
+        return {
+            "status": "success" if res.returncode == 0 else "error",
+            "stdout": res.stdout,
+            "stderr": res.stderr
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.post("/api/sync/rename")
+async def api_sync_rename():
+    import subprocess
+    try:
+        # Run sync_rename.py in backend directory
+        cmd = [sys.executable, "sync_rename.py"]
+        res = subprocess.run(cmd, capture_output=True, text=True, cwd=os.path.dirname(os.path.abspath(__file__)))
+        return {
+            "status": "success" if res.returncode == 0 else "error",
+            "stdout": res.stdout,
+            "stderr": res.stderr
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 @app.get("/api/logs")

@@ -22,37 +22,52 @@
         return;
     }
 
-    // Extract Subdomain
-    let subdomain = "";
+    // Extract Subdomain(s)
+    let subdomains = [];
     const hostname = window.location.hostname;
     const pathname = window.location.pathname;
 
     if (hostname.includes(".club.hotmart.com")) {
-        subdomain = hostname.split(".")[0];
+        subdomains.push(hostname.split(".")[0]);
     } else {
         const clubMatch = pathname.match(/\/club\/([^/]+)/);
         if (clubMatch) {
-            subdomain = clubMatch[1];
+            subdomains.push(clubMatch[1]);
         }
     }
 
-    // Extract Product ID
-    let productId = "";
+    // Scan localStorage / sessionStorage for all subdomains
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        const val = localStorage.getItem(key);
+        if (key && key.includes("club") && val && typeof val === "string" && val.length < 50) {
+            if (!subdomains.includes(val) && !val.includes("{")) subdomains.push(val);
+        }
+    }
+
+    // Extract Product ID(s)
+    let productIds = [];
     const prodMatch = pathname.match(/\/(?:products|player)\/([0-9]+)/);
     if (prodMatch) {
-        productId = prodMatch[1];
-    } else {
-        // Fallback search in localStorage
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && (key.includes("productId") || key.includes("product-id"))) {
-                productId = localStorage.getItem(key);
-                break;
-            }
+        productIds.push(prodMatch[1]);
+    }
+
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.includes("productId") || key.includes("product-id"))) {
+            const val = localStorage.getItem(key);
+            if (val && !productIds.includes(val)) productIds.push(val);
         }
     }
 
-    const output = `TOKEN="${tokenFound}"\nSUBDOMAIN="${subdomain}"\nPRODUCT_ID="${productId}"`;
-    copy(output);
-    alert("Token configuration successfully copied to clipboard!\\n\\nPaste it directly inside the 'Bearer Token or SSO Token' box in the Web app.");
+    const payload = {
+        token: tokenFound,
+        subdomain: subdomains.length === 1 ? subdomains[0] : subdomains,
+        product_id: productIds.length === 1 ? productIds[0] : productIds
+    };
+
+    const outputJSON = JSON.stringify(payload, null, 2);
+    copy(outputJSON);
+    alert("Token & Course Info JSON copied to clipboard!\n\nYou can paste this JSON (or just the token) into the 'Bearer / SSO Token' box in the Web app.");
 })();
+

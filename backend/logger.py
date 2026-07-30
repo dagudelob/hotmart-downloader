@@ -71,4 +71,5 @@ def loga(curso, status, msg):
             logz.write(line)
     except Exception:
         pass
+    print_color(f"[{status}] {msg}")
     debug(f"[{status}] {msg}")

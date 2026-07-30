@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   DownloadCloud, KeyRound, ExternalLink, ChevronUp, ChevronDown, 
   RefreshCw, LogIn, Sliders, Download, ListVideo, Terminal, Lock, 
-  Circle, ArrowUpDown, CheckSquare, Square, LogOut, CheckCircle2
+  Circle, ArrowUpDown, CheckSquare, Square, LogOut, CheckCircle2,
+  Copy, Check, FileSearch, HelpCircle, X
 } from 'lucide-react';
 
 interface Lesson {
@@ -32,20 +33,28 @@ export default function App() {
   const [token, setToken] = useState('');
   const [subdomain, setSubdomain] = useState('');
   const [manualSubdomain, setManualSubdomain] = useState('');
+  const [productId, setProductId] = useState('');
   const [downloadDir, setDownloadDir] = useState('');
   const [subdomains, setSubdomains] = useState<SubdomainItem[]>([]);
   const [tokenPresent, setTokenPresent] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [syncChecking, setSyncChecking] = useState(false);
+  const [syncRenaming, setSyncRenaming] = useState(false);
+  const [auditOutput, setAuditOutput] = useState<string | null>(null);
   
   const [modules, setModules] = useState<Module[]>([]);
   const [selectedLessonIds, setSelectedLessonIds] = useState<Set<string>>(new Set());
   const [activeDownloads, setActiveDownloads] = useState<Record<string, { percentage: number; status: string }>>({});
   const [logs, setLogs] = useState('Loading logs...');
   
-  const [activeTab, setActiveTab] = useState<'modules' | 'logs'>('modules');
+  const [activeTab, setActiveTab] = useState<'modules' | 'logs' | 'audit'>('modules');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  
+  // Script modal states
+  const [showScriptModal, setShowScriptModal] = useState(false);
+  const [copiedScript, setCopiedScript] = useState(false);
   
   // UI States
   const [isCredsCollapsed, setIsCredsCollapsed] = useState(false);
@@ -53,6 +62,159 @@ export default function App() {
   const [expandedModules, setExpandedModules] = useState<Record<number, boolean>>({});
 
   const wsRef = useRef<WebSocket | null>(null);
+
+  const getScriptText = () => {
+    return `(function () {
+    let tokenFound = null;
+    for (let i = 0; i < localStorage.length; i++) {
+        const value = localStorage.getItem(localStorage.key(i));
+        if (value && value.includes("eyJ")) {
+            const match = value.match(/eyJ[A-Za-z0-9-_=]+\\.[A-Za-z0-9-_=]+\\.?[A-Za-z0-9-_.+/=]*/);
+            if (match) { tokenFound = match[0]; break; }
+        }
+    }
+    if (!tokenFound) {
+        for (let i = 0; i < sessionStorage.length; i++) {
+            const value = sessionStorage.getItem(sessionStorage.key(i));
+            if (value && value.includes("eyJ")) {
+                const match = value.match(/eyJ[A-Za-z0-9-_=]+\\.[A-Za-z0-9-_=]+\\.?[A-Za-z0-9-_.+/=]*/);
+                if (match) { tokenFound = match[0]; break; }
+            }
+        }
+    }
+
+    if (!tokenFound) {
+        alert("Token not found. Make sure you are logged into your Hotmart course player page.");
+        return;
+    }
+
+    let subdomains = [];
+    const hostname = window.location.hostname;
+    const pathname = window.location.pathname;
+
+    if (hostname.includes(".club.hotmart.com")) {
+        subdomains.push(hostname.split(".")[0]);
+    } else {
+        const clubMatch = pathname.match(/\\/club\\/([^/]+)/);
+        if (clubMatch) subdomains.push(clubMatch[1]);
+    }
+
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        const val = localStorage.getItem(key);
+        if (key && key.includes("club") && val && typeof val === "string" && val.length < 50) {
+            if (!subdomains.includes(val) && !val.includes("{")) subdomains.push(val);
+        }
+    }
+
+    let productIds = [];
+    const prodMatch = pathname.match(/\\/(?:products|player)\\/([0-9]+)/);
+    if (prodMatch) productIds.push(prodMatch[1]);
+
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.includes("productId") || key.includes("product-id"))) {
+            const val = localStorage.getItem(key);
+            if (val && !productIds.includes(val)) productIds.push(val);
+        }
+    }
+
+    const payload = {
+        token: tokenFound,
+        subdomain: subdomains.length === 1 ? subdomains[0] : (subdomains.length > 0 ? subdomains : ""),
+        product_id: productIds.length === 1 ? productIds[0] : (productIds.length > 0 ? productIds : "")
+    };
+
+    copy(JSON.stringify(payload, null, 2));
+    alert("Token & Course Info JSON copied to clipboard!\\n\\nYou can paste this JSON (or just the raw token) into the 'Bearer / SSO Token' box in the Web app.");
+})();`;
+  };
+
+  const handleTokenChange = (value: string) => {
+    const trimmed = value.trim();
+
+    // Option 1: Parse full JSON object if user pastes JSON
+    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        
+        // Extract token
+        if (parsed.token) {
+          setToken(String(parsed.token).trim());
+        }
+
+        // Extract subdomain (can be string or array)
+        if (parsed.subdomain) {
+          if (Array.isArray(parsed.subdomain)) {
+            const firstSub = parsed.subdomain[0] || '';
+            setManualSubdomain(firstSub);
+            setSubdomain('');
+            // Add all extracted subdomains to subdomains list
+            const formatted = parsed.subdomain.map((s: string) => ({
+              subdomain: s,
+              source: 'script',
+              name: s
+            }));
+            setSubdomains(prev => {
+              const existing = new Set(prev.map(p => p.subdomain));
+              const newItems = formatted.filter((f: SubdomainItem) => !existing.has(f.subdomain));
+              return [...prev, ...newItems];
+            });
+          } else {
+            setManualSubdomain(String(parsed.subdomain).trim());
+            setSubdomain('');
+          }
+        }
+
+        // Extract product_id (can be string, number or array)
+        if (parsed.product_id || parsed.productId) {
+          const pid = parsed.product_id || parsed.productId;
+          if (Array.isArray(pid)) {
+            setProductId(String(pid[0]).trim());
+          } else {
+            setProductId(String(pid).trim());
+          }
+        }
+        return;
+      } catch (e) {
+        // Fallback to plain text if JSON parse fails
+      }
+    }
+
+    // Option 2: Check for TOKEN= / SUBDOMAIN= / PRODUCT_ID= KEY-VALUE block
+    if (value.includes("TOKEN=") || value.includes("SUBDOMAIN=")) {
+      const tokenMatch = value.match(/TOKEN=["']?([^"'\n]+)["']?/);
+      const subMatch = value.match(/SUBDOMAIN=["']?([^"'\n]+)["']?/);
+      const prodMatch = value.match(/PRODUCT_ID=["']?([^"'\n]+)["']?/);
+
+      if (tokenMatch && tokenMatch[1]) setToken(tokenMatch[1].trim());
+      else setToken(value.trim());
+
+      if (subMatch && subMatch[1]) {
+        setManualSubdomain(subMatch[1].trim());
+        setSubdomain('');
+      }
+      if (prodMatch && prodMatch[1]) {
+        setProductId(prodMatch[1].trim());
+      }
+      return;
+    }
+
+    // Option 3: Plain raw Token string
+    setToken(value);
+  };
+
+
+
+  const copyTokenScript = () => {
+    navigator.clipboard.writeText(getScriptText());
+    setCopiedScript(true);
+    setShowScriptModal(true);
+    setTimeout(() => setCopiedScript(false), 3000);
+  };
+
+  // Check if token and subdomain (or manualSubdomain) are provided
+  const hasRequiredCredentials = Boolean(token.trim() && (subdomain || manualSubdomain.trim()));
 
   // Backend host (change to localhost:8000 when running dev servers)
   const apiHost = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '';
@@ -154,6 +316,7 @@ export default function App() {
         body: JSON.stringify({
           token,
           subdomain: targetSubdomain,
+          product_id: productId,
           download_dir: downloadDir
         })
       });
@@ -291,6 +454,71 @@ export default function App() {
     triggerDownload(missingIds);
   };
 
+  const refreshCourseData = async () => {
+    const targetSubdomain = subdomain || manualSubdomain;
+    if (!token) return;
+    try {
+      const res = await fetch(`${apiHost}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          subdomain: targetSubdomain,
+          product_id: productId,
+          download_dir: downloadDir
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setModules(data.modules || []);
+      }
+    } catch (err) {
+      console.error("Failed to refresh course data:", err);
+    }
+  };
+
+  const runSyncCheck = async () => {
+    setSyncChecking(true);
+    setActiveTab('audit');
+    try {
+      const res = await fetch(`${apiHost}/api/sync/check`, { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        const out = `=== AUDIT DISK VS WEB RESULT ===\n\nSTDOUT:\n${data.stdout || '(Empty)'}\n\nSTDERR:\n${data.stderr || '(Empty)'}`;
+        setAuditOutput(out);
+        setLogs(prev => `${out}\n\n${prev}`);
+      } else {
+        const errOut = `Audit error: ${data.error || 'Failed to check sync'}`;
+        setAuditOutput(errOut);
+      }
+    } catch (err: any) {
+      setAuditOutput(`Error executing audit: ${err.message}`);
+    } finally {
+      setSyncChecking(false);
+    }
+  };
+
+  const runSyncRename = async () => {
+    if (!confirm('¿Estás seguro de que deseas renombrar y mover los archivos físicamente en el disco?')) return;
+    setSyncRenaming(true);
+    try {
+      const res = await fetch(`${apiHost}/api/sync/rename`, { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        const out = `=== REORGANIZATION OUTPUT ===\n\nSTDOUT:\n${data.stdout || '(Empty)'}\n\nSTDERR:\n${data.stderr || '(Empty)'}`;
+        setLogs(prev => `${out}\n\n${prev}`);
+        setActiveTab('logs');
+        await refreshCourseData();
+      } else {
+        alert(data.error || 'Failed to rename sync');
+      }
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setSyncRenaming(false);
+    }
+  };
+
   // Sorting
   const sortedModules = [...modules].sort((a, b) => {
     return sortOrder === 'asc' ? a.order - b.order : b.order - a.order;
@@ -298,6 +526,78 @@ export default function App() {
 
   return (
     <div className="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans selection:bg-brand-500/30 selection:text-white">
+      {/* Script Copy & Tutorial Modal */}
+      {showScriptModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl max-w-xl w-full p-6 space-y-5 relative">
+            <button 
+              onClick={() => setShowScriptModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/30 text-emerald-400">
+                <Check className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-bold text-lg text-white">Script copied to clipboard!</h3>
+                <p className="text-xs text-slate-400">Follow these steps to extract your token and course info.</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-sm text-slate-300">
+              <div className="flex items-start gap-3 bg-slate-950/60 p-3 rounded-lg border border-slate-800/80">
+                <span className="bg-brand-500 text-white font-bold text-xs rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
+                <div>
+                  <p className="font-medium text-slate-200">Open Hotmart Course Player</p>
+                  <p className="text-xs text-slate-400">Go to your browser tab where you are logged into your Hotmart course player page.</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 bg-slate-950/60 p-3 rounded-lg border border-slate-800/80">
+                <span className="bg-brand-500 text-white font-bold text-xs rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
+                <div>
+                  <p className="font-medium text-slate-200">Open Developer Console</p>
+                  <p className="text-xs text-slate-400">Press <kbd className="bg-slate-800 px-1.5 py-0.5 rounded text-[10px]">F12</kbd> (or right click → Inspect) and switch to the <strong>Console</strong> tab.</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 bg-slate-950/60 p-3 rounded-lg border border-slate-800/80">
+                <span className="bg-brand-500 text-white font-bold text-xs rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
+                <div>
+                  <p className="font-medium text-slate-200">Paste & Press Enter</p>
+                  <p className="text-xs text-slate-400">Paste the copied script (<kbd className="bg-slate-800 px-1.5 py-0.5 rounded text-[10px]">Ctrl + V</kbd>) into the console and press <kbd className="bg-slate-800 px-1.5 py-0.5 rounded text-[10px]">Enter</kbd>.</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 bg-slate-950/60 p-3 rounded-lg border border-slate-800/80">
+                <span className="bg-brand-500 text-white font-bold text-xs rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">4</span>
+                <div>
+                  <p className="font-medium text-slate-200">Paste Output in Web App</p>
+                  <p className="text-xs text-slate-400">An alert will confirm token capture. The config text is ready in your clipboard—simply paste it in the <strong>"Bearer Token or SSO Token"</strong> box below!</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+              <button
+                onClick={copyTokenScript}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 rounded-lg transition flex items-center gap-1.5"
+              >
+                <Copy className="w-3.5 h-3.5" /> Re-copy Script
+              </button>
+              <button
+                onClick={() => setShowScriptModal(false)}
+                className="px-4 py-1.5 bg-brand-500 hover:bg-brand-600 text-xs font-semibold text-white rounded-lg transition"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -306,15 +606,16 @@ export default function App() {
               <DownloadCloud className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-white">Hotmart Downloader</h1>
-              <p className="text-xs text-slate-400">Phase 2: Decoupled Web App</p>
+              <h1 className="font-bold text-lg text-white leading-none">Hotmart Course Downloader</h1>
+              <p className="text-xs text-slate-400 mt-1">Download and organize your Hotmart courses seamlessly</p>
             </div>
           </div>
+
           {isAuthenticated && (
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-xs text-slate-300">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                Authenticated
+              <div className="text-right hidden sm:block">
+                <span className="text-[10px] uppercase tracking-wider text-slate-500 block font-semibold">Active Session</span>
+                <span className="text-xs font-medium text-brand-400">{subdomain || manualSubdomain}</span>
               </div>
               <button 
                 onClick={handleLogout}
@@ -367,6 +668,26 @@ export default function App() {
             <div className={`p-5 pt-4 space-y-4 ${isCredsCollapsed ? 'hidden' : ''}`}>
               {!isAuthenticated ? (
                 <form onSubmit={handleLogin} className="space-y-4">
+                  {/* Script copy button & Helper */}
+                  <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                        <HelpCircle className="w-3.5 h-3.5 text-brand-400" /> Get Token Script
+                      </span>
+                      {copiedScript && (
+                        <span className="text-[10px] text-emerald-400 font-semibold">Copied!</span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={copyTokenScript}
+                      className="w-full py-2 px-3 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 hover:text-white rounded-md text-xs font-medium transition flex items-center justify-center gap-2"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      Copy Get_Token.js & View Steps
+                    </button>
+                  </div>
+
                   {/* Subdomain Detection / Selection */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
@@ -420,6 +741,18 @@ export default function App() {
                     />
                   </div>
 
+                  {/* Product ID (Optional) */}
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Product ID (Optional)</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. 1234567" 
+                      value={productId}
+                      onChange={(e) => setProductId(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 rounded-lg px-3 py-2 text-sm text-slate-200 outline-none transition font-mono" 
+                    />
+                  </div>
+
                   {/* Token Field */}
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
@@ -432,7 +765,7 @@ export default function App() {
                       rows={3} 
                       placeholder="Paste token or config block..." 
                       value={token}
-                      onChange={(e) => setToken(e.target.value)}
+                      onChange={(e) => handleTokenChange(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-800 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none transition font-mono"
                     />
                   </div>
@@ -449,18 +782,31 @@ export default function App() {
                     />
                   </div>
 
-                  <button 
-                    type="submit"
-                    disabled={loading}
-                    className="w-full py-2.5 bg-brand-500 hover:bg-brand-600 active:bg-brand-700 rounded-lg text-sm font-semibold transition text-white shadow-lg shadow-brand-500/20 flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    {loading ? (
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <LogIn className="w-4 h-4" />
+                  {/* Dynamic Red/Green Connect Button */}
+                  <div className="relative group">
+                    <button 
+                      type="submit"
+                      disabled={loading}
+                      title={!hasRequiredCredentials ? "enter token and subdomain" : "Click to connect and load course"}
+                      className={`w-full py-2.5 rounded-lg text-sm font-semibold transition text-white shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 ${
+                        hasRequiredCredentials
+                          ? 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 shadow-emerald-600/20'
+                          : 'bg-red-600 hover:bg-red-700 active:bg-red-800 shadow-red-600/20'
+                      }`}
+                    >
+                      {loading ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <LogIn className="w-4 h-4" />
+                      )}
+                      Connect & Load Course
+                    </button>
+                    {!hasRequiredCredentials && (
+                      <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition duration-200 bg-slate-900 text-red-300 text-[11px] font-medium px-2.5 py-1 rounded border border-red-800/80 whitespace-nowrap shadow-xl z-20">
+                        enter token and subdomain
+                      </div>
                     )}
-                    Connect & Load Course
-                  </button>
+                  </div>
 
                   {loginError && (
                     <div className="text-xs text-red-400 bg-red-950/30 border border-red-900/50 p-3 rounded-lg leading-relaxed whitespace-pre-wrap">
@@ -514,6 +860,29 @@ export default function App() {
                   <Download className="w-4 h-4" />
                   Download Selected ({selectedLessonIds.size})
                 </button>
+                <div className="border-t border-slate-800 my-2 pt-2 text-xs text-slate-400 font-medium">
+                  Disk Structure Sync
+                </div>
+                <button 
+                  onClick={runSyncCheck}
+                  disabled={syncChecking || syncRenaming}
+                  className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-800 disabled:text-slate-500 rounded-lg text-xs font-semibold text-white transition flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/10"
+                >
+                  <FileSearch className={`w-3.5 h-3.5 ${syncChecking ? 'animate-spin' : ''}`} />
+                  {syncChecking ? 'Checking Structure...' : 'Audit Disk vs Web'}
+                </button>
+                <button 
+                  onClick={runSyncRename}
+                  disabled={syncChecking || syncRenaming}
+                  className="w-full py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-800 disabled:text-slate-500 rounded-lg text-xs font-semibold text-white transition flex items-center justify-center gap-2 shadow-lg shadow-purple-600/10"
+                >
+                  {syncRenaming ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  )}
+                  {syncRenaming ? 'Reorganizing Disk...' : 'Apply Reorganization'}
+                </button>
               </div>
             </div>
           )}
@@ -554,6 +923,17 @@ export default function App() {
                   Modules & Classes
                 </button>
                 <button 
+                  onClick={() => setActiveTab('audit')}
+                  className={`py-2.5 px-4 text-sm font-semibold border-b-2 flex items-center gap-2 transition ${
+                    activeTab === 'audit' 
+                      ? 'border-brand-500 text-brand-500 font-bold' 
+                      : 'border-transparent text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <FileSearch className="w-4 h-4" />
+                  Disk vs Web Audit
+                </button>
+                <button 
                   onClick={() => setActiveTab('logs')}
                   className={`py-2.5 px-4 text-sm font-semibold border-b-2 flex items-center gap-2 transition ${
                     activeTab === 'logs' 
@@ -573,33 +953,34 @@ export default function App() {
                   <div className="flex items-center justify-between border-b border-slate-800 pb-3 flex-wrap gap-2">
                     <div className="flex items-center gap-2">
                       <ListVideo className="w-5 h-5 text-brand-500" />
-                      <h2 className="font-semibold text-base text-white">Course Outline</h2>
+                      <h2 className="font-semibold text-base text-white">Course Structure</h2>
                     </div>
-                    <div className="flex items-center gap-2 text-xs flex-wrap">
+
+                    <div className="flex items-center gap-2 flex-wrap text-xs">
                       <button 
-                        onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} 
-                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-700 text-slate-400 hover:text-brand-500 hover:border-brand-500/50 transition font-medium"
+                        onClick={selectAll}
+                        className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center gap-1 font-medium"
                       >
-                        <ArrowUpDown className="w-3.5 h-3.5" />
-                        Sort: <span className="capitalize font-semibold text-slate-200">{sortOrder}</span>
+                        <CheckSquare className="w-3.5 h-3.5 text-brand-400" /> Select All
                       </button>
                       <button 
-                        onClick={selectMissing} 
-                        className="px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition font-medium"
+                        onClick={selectMissing}
+                        className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center gap-1 font-medium"
                       >
-                        Select Missing
+                        <DownloadCloud className="w-3.5 h-3.5 text-amber-400" /> Select Missing
                       </button>
                       <button 
-                        onClick={selectAll} 
-                        className="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white transition font-medium"
+                        onClick={deselectAll}
+                        className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center gap-1 font-medium"
                       >
-                        Select All
+                        <Square className="w-3.5 h-3.5 text-slate-400" /> Deselect All
                       </button>
                       <button 
-                        onClick={deselectAll} 
-                        className="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white transition font-medium"
+                        onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                        className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center gap-1 font-medium ml-2 border border-slate-700"
+                        title="Sort Order"
                       >
-                        Deselect All
+                        <ArrowUpDown className="w-3.5 h-3.5 text-brand-400" /> {sortOrder.toUpperCase()}
                       </button>
                     </div>
                   </div>
@@ -716,6 +1097,36 @@ export default function App() {
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+              )}
+
+              {/* Disk vs Web Audit View */}
+              {activeTab === 'audit' && (
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-2xl space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <FileSearch className="w-5 h-5 text-brand-500" />
+                      <h2 className="font-semibold text-base text-white">Disk vs Web Discrepancies Audit</h2>
+                    </div>
+                    <button 
+                      onClick={runSyncCheck} 
+                      disabled={syncChecking}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition text-xs font-semibold shadow-lg shadow-indigo-600/10 disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${syncChecking ? 'animate-spin' : ''}`} />
+                      {syncChecking ? 'Running Audit...' : 'Re-run Audit'}
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      This tab compares the modules and classes structure available on Hotmart Web against your local downloaded files on disk to highlight missing or misaligned files.
+                    </p>
+
+                    <pre className="bg-slate-950 border border-slate-800 rounded-lg p-4 font-mono text-xs text-slate-300 max-h-[60vh] overflow-y-auto whitespace-pre-wrap leading-relaxed font-mono">
+                      {auditOutput || 'No audit executed yet. Click "Re-run Audit" or "Audit Disk vs Web" from the sidebar to inspect discrepancies.'}
+                    </pre>
                   </div>
                 </div>
               )}
