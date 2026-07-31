@@ -25,3 +25,15 @@ universo-hot-universo-hot-jamin
 
 *.env
 start.sh
+
+#logs
+log.txt
+
+#SKILLS LOCK
+skills-lock.json
+
+#vscode
+.vscode
+
+#settings.json
+settings.json

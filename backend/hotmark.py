@@ -461,7 +461,7 @@ def download_class_video(aula, modulo, folder_path_class, first_folder, authMart
 
         loga(first_folder, "INFO", "Executing FFMPEG")
         try:
-            proc = subprocess.run(ffmpegcmd, shell=True, capture_output=True, text=True)
+            proc = subprocess.run(ffmpegcmd, shell=True, capture_output=True, text=True, stdin=subprocess.DEVNULL)
             os.chdir(cwd_actual)
             if os.path.exists(dest_abs) and os.path.getsize(dest_abs) > 0:
                 size_mb = os.path.getsize(dest_abs) / (1024 * 1024)
@@ -775,7 +775,7 @@ def listacursos(authMart, params):
     produtos = check_token_response.get('resources', [])
     
     if not produtos:
-        loga(".", "WARN", "No se encontraron productos en check_token")
+        loga(".", "WARN", "No products found in check_token")
         print_color("\nWARNING: Hotmart API did not return courses automatically.")
         
         try:

@@ -15,11 +15,12 @@ def slugify(value):
     return re.sub(r'[-\s]+', '-', value).strip('-_')
 
 def main():
-    if not os.path.exists('universo-hot-jamin/debug.txt'):
-        print("No se encontró el archivo de estructura debug.txt")
+    course_folder = sys.argv[1] if len(sys.argv) > 1 else 'downloads'
+    if not os.path.exists(os.path.join(course_folder, 'debug.txt')):
+        print(f"No se encontró el archivo de estructura debug.txt en {course_folder}")
         return
 
-    with open('universo-hot-jamin/debug.txt', 'r', encoding='utf-8') as f:
+    with open(os.path.join(course_folder, 'debug.txt'), 'r', encoding='utf-8') as f:
         modules = ast.literal_eval(f.read().split('\n\n\n')[0])
 
     class_counter = 1
@@ -28,11 +29,11 @@ def main():
     
     # Escanear qué archivos existen físicamente en la carpeta
     existing_videos = set()
-    for root, dirs, files in os.walk('universo-hot-jamin'):
+    for root, dirs, files in os.walk(course_folder):
         for file in files:
             if file.endswith('.mp4'):
                 # Guardamos la ruta relativa limpia usando barras normales
-                rel_path = os.path.relpath(os.path.join(root, file), 'universo-hot-jamin').replace('\\', '/')
+                rel_path = os.path.relpath(os.path.join(root, file), course_folder).replace('\\', '/')
                 existing_videos.add(rel_path)
 
     for mod_idx, mod in enumerate(modules, start=1):
@@ -40,9 +41,9 @@ def main():
         
         # Encontrar cómo se nombró la carpeta del módulo físicamente
         mod_dir_name = None
-        if os.path.exists('universo-hot-jamin'):
-            for name in os.listdir('universo-hot-jamin'):
-                if os.path.isdir(os.path.join('universo-hot-jamin', name)):
+        if os.path.exists(course_folder):
+            for name in os.listdir(course_folder):
+                if os.path.isdir(os.path.join(course_folder, name)):
                     if name.startswith(f"{mod_idx}_") or name == mod_name_clean:
                         mod_dir_name = name
                         break
