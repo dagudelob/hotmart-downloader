@@ -989,15 +989,40 @@ export default function App() {
                   <div className="space-y-3 max-h-[65vh] overflow-y-auto pr-1">
                     {sortedModules.map(mod => {
                       const isExpanded = !!expandedModules[mod.order];
+                      const totalLessons = mod.lessons.length;
+                      const downloadedCount = mod.lessons.filter(l => l.downloaded).length;
+
+                      const isAllDownloaded = totalLessons > 0 && downloadedCount === totalLessons;
+                      const isPartiallyDownloaded = downloadedCount > 0 && downloadedCount < totalLessons;
+
+                      // Color theme based on download status
+                      const containerStyle = isAllDownloaded
+                        ? "border-emerald-500/40 bg-emerald-950/10 border-l-4 border-l-emerald-500"
+                        : isPartiallyDownloaded
+                        ? "border-amber-500/40 bg-amber-950/10 border-l-4 border-l-amber-500"
+                        : "border-red-500/30 bg-slate-950/45 border-l-4 border-l-red-500";
+
+                      const badgeStyle = isAllDownloaded
+                        ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/30"
+                        : isPartiallyDownloaded
+                        ? "text-amber-400 bg-amber-500/10 border-amber-500/30"
+                        : "text-red-400 bg-red-500/10 border-red-500/30";
+
+                      const countTextStyle = isAllDownloaded
+                        ? "text-emerald-400 font-semibold"
+                        : isPartiallyDownloaded
+                        ? "text-amber-400 font-semibold"
+                        : "text-red-400/80 font-medium";
+
                       return (
-                        <div key={mod.order} className="border border-slate-800/80 rounded-lg overflow-hidden bg-slate-950/45">
+                        <div key={mod.order} className={`border rounded-lg overflow-hidden transition-colors ${containerStyle}`}>
                           {/* Header */}
                           <div 
                             onClick={() => toggleModule(mod.order)}
                             className="flex items-center justify-between p-3.5 bg-slate-900/60 cursor-pointer hover:bg-slate-900 transition select-none"
                           >
                             <div className="flex items-center gap-2 min-w-0 mr-4">
-                              <span className="text-[10px] text-brand-500 bg-brand-500/10 px-2 py-0.5 rounded border border-brand-500/20 font-bold whitespace-nowrap">
+                              <span className={`text-[10px] px-2 py-0.5 rounded border font-bold whitespace-nowrap ${badgeStyle}`}>
                                 Module {mod.order}
                               </span>
                               <span className="text-sm font-semibold text-slate-200 truncate">{mod.name}</span>
@@ -1017,7 +1042,9 @@ export default function App() {
                                   Deselect All
                                 </button>
                               </div>
-                              <span className="text-xs text-slate-400 font-normal whitespace-nowrap">{mod.lessons.length} classes</span>
+                              <span className={`text-xs whitespace-nowrap ${countTextStyle}`}>
+                                {mod.lessons.length} classes ({downloadedCount}/{totalLessons} downloaded)
+                              </span>
                               <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
                             </div>
                           </div>

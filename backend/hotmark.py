@@ -500,15 +500,24 @@ def download_class_assets(aula, modulo, folder_path_class, first_folder, authMar
     """
     # 1. Fetch class details (HTML content description, attachments, readings)
     try:
-        resp_page = authMart.get(f'https://api-club.hotmart.com/hot-club-api/rest/v3/page/{aula[2]}')
+        resp_page = None
+        for attempt in range(2):
+            try:
+                resp_page = authMart.get(f'https://api-club.hotmart.com/hot-club-api/rest/v3/page/{aula[2]}', timeout=10)
+                break
+            except Exception:
+                if attempt == 1:
+                    raise
+
         lesson_json = {}
-        if resp_page.status_code == 200:
+        if resp_page and resp_page.status_code == 200:
             lesson_json = resp_page.json()
             desct = lesson_json.get('content', '')
         else:
             resp_page = authMart.get(
                 f'https://api-club-course-consumption-gateway-ga.cb.hotmart.com/v2/web/lessons/{aula[2]}',
-                headers=nav_headers
+                headers=nav_headers,
+                timeout=10
             )
             lesson_json = resp_page.json()
             desct = lesson_json.get('content') or lesson_json.get('description') or ''
@@ -520,7 +529,8 @@ def download_class_assets(aula, modulo, folder_path_class, first_folder, authMar
                 dd.write(str(desct))
                 loga(first_folder, "INFO", f"Description saved successfully for class: {str(aula[0])}.{aula[1]}")
     except Exception as e_desc:
-        loga(first_folder, "ERROR", f"Failed to save class description for {str(aula[0])}. {aula[1]}: {e_desc}")
+        loga(first_folder, "WARNING", f"Could not fetch class description for {str(aula[0])}. {aula[1]}: {e_desc}")
+
 
     # 2. Process Video downloads
     if not aula[3]['videos']:
